@@ -1,0 +1,36 @@
+[
+  {
+    "id": "sample-001",
+    "text": "Contact me on Telegram @rahul123 or call +91 9876543210.",
+    "expected_entities": [
+      {
+        "type": "handle",
+        "value": "@rahul123"
+      },
+      {
+        "type": "phone",
+        "value": "+91 9876543210"
+      }
+    ]
+  },
+  {
+    "id": "sample-002",
+    "text": "Send the details to test@example.com.",
+    "expected_entities": [
+      {
+        "type": "email",
+        "value": "test@example.com"
+      }
+    ]
+  },
+  {
+    "id": "sample-003",
+    "text": "More information is available at https://example.com/case/123.",
+    "expected_entities": [
+      {
+        "type": "url",
+        "value": "https://example.com/case/123"
+      }
+    ]
+  }
+]
