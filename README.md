@@ -1,133 +1,51 @@
 # DigitalWitness
 
-DigitalWitness is a team project for preserving digital evidence and checking whether a file has changed since it was recorded. The design uses SHA-256 hashes and a Merkle tree off-chain, with only a batch root and its leaf count written to the blockchain.
+DigitalWitness preserves digital evidence and checks whether it has changed since upload. It hashes evidence with SHA-256, builds Merkle trees off-chain, and anchors only each batch root and leaf count on-chain.
 
-> **Project status:** The integrity and local blockchain feature is implemented on `feat/a-merkle-contract`. It has unit tests and local Hardhat support. The shared API, database migrations, object storage, audit logging, and worker integration are still team integration work. The integrity database and API documents in `docs/` are proposals, not implemented endpoints or migrations.
+## Status
 
-## What is in this repository
+Member A's integrity services, `EvidenceAnchor` contract, local Hardhat setup, and focused tests are on `feat/a-merkle-contract`. API routes, database persistence and migrations, object storage, audit logging, and worker integration depend on the shared backend and finalized schema. The API and database documents in `docs/` are proposals, not migrations or live endpoints.
 
-- `backend/app/integrity/` - Merkle tree, chain RPC, batch construction, and verification services.
-- `backend/tests/` - Python unit tests for the integrity services.
-- `contracts/EvidenceAnchor.sol` - contract that records a Merkle root and leaf count.
-- `test/EvidenceAnchor.ts` - contract tests.
-- `scripts/deploy.ts` - deploys the contract and writes a local deployment record under `contracts/deployments/`.
-- `docs/merkle-spec.md` - hash, ordering, proof, and verification rules.
-- `docs/integrity-db-contract.md` and `docs/integrity-api-contract.md` - proposed integration contracts for the team.
+## Integrity rules
 
-## Requirements
+- Order evidence by `uploaded_at`, then `evidence_id`.
+- Hash leaves with `SHA-256(0x00 || file_hash)` and parents with `SHA-256(0x01 || left || right)`; promote an unpaired node unchanged.
+- Anchor batches at 10 items or when the oldest item reaches 30 seconds. Retry delays are 5, 15, and 45 seconds.
+- Store only the Merkle root and leaf count on-chain. Never put evidence content, personal information, or individual file hashes on-chain.
+- Verification results are `verified`, `altered`, `pending`, or `error`. Storage or RPC failure is `error`, not `altered`.
 
-- Node.js 24 or newer and npm.
-- Python 3.11 for the backend integrity code and Python tests.
-- Windows PowerShell commands are shown below. On Windows, use the `.cmd` Hardhat executable if PowerShell blocks `npx.ps1` due to execution policy.
+See [the Merkle specification](docs/merkle-spec.md) and the proposed [database](docs/integrity-db-contract.md) and [API](docs/integrity-api-contract.md) contracts.
 
-## Get the project
+## Local development
+
+Requirements: Node.js 24+, npm, and Python 3.11.
 
 ```powershell
 git clone https://github.com/avoanmol/DigitalWitness.git
 Set-Location DigitalWitness
-```
-
-To use the current integrity feature before it is merged, check out its branch:
-
-```powershell
 git switch feat/a-merkle-contract
-```
-
-## Install dependencies
-
-Install the Node dependencies:
-
-```powershell
 npm install
-```
-
-Create a Python virtual environment and install the backend requirements:
-
-```powershell
 py -3.11 -m venv backend\.venv
 & .\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 
-If `py -3.11` is unavailable, use the full path to your Python 3.11 executable in both commands.
-
-## Run the tests
-
-Run the Solidity and TypeScript tests:
+Run the tests:
 
 ```powershell
 .\node_modules\.bin\hardhat.cmd test
-```
-
-Run the Python integrity tests:
-
-```powershell
 & .\backend\.venv\Scripts\python.exe -m unittest discover -s backend\tests -v
 ```
 
-## Run a local blockchain demo
-
-Open a first PowerShell window in the repository and start a local Hardhat node:
-
-```powershell
-.\node_modules\.bin\hardhat.cmd node
-```
-
-Leave that window open. In a second PowerShell window, deploy the contract to that node:
+For a local chain, start `.\node_modules\.bin\hardhat.cmd node` in one terminal. In another, deploy with:
 
 ```powershell
 $env:DW_NETWORK = "localhost"
-try {
-    .\node_modules\.bin\hardhat.cmd run scripts\deploy.ts
-}
-finally {
-    Remove-Item Env:DW_NETWORK -ErrorAction SilentlyContinue
-}
+.\node_modules\.bin\hardhat.cmd run scripts\deploy.ts
+Remove-Item Env:DW_NETWORK
 ```
 
-The deploy command prints `CHAIN_CONTRACT_ADDRESS` and saves the deployment details to `contracts/deployments/localhost.json`. The deployment file is local output; do not commit it.
+The deploy script prints the contract address and writes local output under `contracts/deployments/`. The Python chain client uses `CHAIN_RPC_URL` (default `http://127.0.0.1:8545`), `CHAIN_CONTRACT_ADDRESS`, and a local unlocked `CHAIN_SENDER_ADDRESS`. Do not use Hardhat development keys on public networks or commit credentials/deployment output.
 
-The Python chain service defaults to `http://127.0.0.1:8545`. Before calling it, set the deployed address and an unlocked account from the **local Hardhat node**:
+## Team boundary
 
-```powershell
-$env:CHAIN_RPC_URL = "http://127.0.0.1:8545"
-$env:CHAIN_CONTRACT_ADDRESS = "<address printed by deploy>"
-$env:CHAIN_SENDER_ADDRESS = "<unlocked account printed by the local Hardhat node>"
-```
-
-Keep the local node running while using the chain service. These example accounts are for local development only. Never use Hardhat's published test keys on a public network.
-
-## Polygon Amoy configuration
-
-The Hardhat `amoy` network uses chain ID `80002`. Set the RPC URL and a funded Amoy test account's private key in the local environment before deploying:
-
-```powershell
-$env:AMOY_RPC_URL = "<Amoy RPC URL>"
-$env:AMOY_PRIVATE_KEY = "<Amoy test account private key>"
-.\node_modules\.bin\hardhat.cmd run scripts\deploy.ts --network amoy
-```
-
-For Python chain submissions, configure `CHAIN_RPC_URL`, `CHAIN_CONTRACT_ADDRESS`, and `CHAIN_PRIVATE_KEY`. Keep these values out of source control and use test funds only. The project uses two confirmations for Amoy and one for the local Hardhat chain.
-
-## Integrity rules
-
-- A file's SHA-256 digest is calculated from the original bytes.
-- Evidence is ordered by upload time, then evidence ID.
-- Leaf hashes use `SHA-256(0x00 || file_hash)`; parent hashes use `SHA-256(0x01 || left || right)`.
-- An unpaired node is promoted unchanged to the next tree level.
-- Only the Merkle root and leaf count are recorded on-chain. File contents, names, and individual evidence hashes do not belong on-chain.
-- A valid proof shows that the supplied hash is part of the anchored batch. It does not prove the evidence was authentic before it was uploaded.
-- Verification outcomes are `verified`, `altered`, `pending`, or `error`. A storage or blockchain outage is an error, not evidence of alteration.
-
-See [the Merkle specification](docs/merkle-spec.md) for the full rules and [the proposed integration contracts](docs/integrity-api-contract.md) for API and database assumptions.
-
-## Team integration boundary
-
-The integrity services currently operate on supplied records and chain configuration. They are not yet connected to the shared application's API, database, evidence storage, or background worker. Member B owns the shared schema and migrations; coordinate the final table names and fields with them before wiring persistence. Confirm the API shapes with the teammate who owns the API before implementing the routes.
-
-Do not create a separate migration history for integrity tables. Add agreed tables to the application's existing migration system when the backend owner provides it.
-
-## Security
-
-- Never commit `.env` files, private keys, RPC credentials, or local deployment output.
-- Do not put evidence content, personal information, or individual file hashes on-chain.
-- Use local Hardhat accounts only against the local development chain.
+Member B owns the shared schema and migration history. Agree on the final schema before wiring persistence; add integrity tables to the existing migrations. Coordinate API shapes with the teammate responsible for the API. Do not create a separate migration history.
