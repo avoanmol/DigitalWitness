@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node.js dependencies
+node_modules/
+artifacts/
+cache/
+typechain-types/
