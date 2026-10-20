@@ -1,0 +1,72 @@
+[
+  {
+    "id": "E001",
+    "language": "en",
+    "text": "Contact me at test@example.com",
+    "expected_entities": ["email"],
+    "expected_threats": []
+  },
+  {
+    "id": "E002",
+    "language": "en",
+    "text": "My number is +919876543210",
+    "expected_entities": ["phone"],
+    "expected_threats": []
+  },
+  {
+    "id": "E003",
+    "language": "en",
+    "text": "Follow @example_user for updates",
+    "expected_entities": ["handle"],
+    "expected_threats": []
+  },
+  {
+    "id": "E004",
+    "language": "en",
+    "text": "Visit https://example.com/case/123",
+    "expected_entities": ["url"],
+    "expected_threats": []
+  },
+  {
+    "id": "E005",
+    "language": "en",
+    "text": "I will kill you tonight.",
+    "expected_entities": [],
+    "expected_threats": ["violence_threat"]
+  },
+  {
+    "id": "E006",
+    "language": "en",
+    "text": "Send your OTP or I will expose you.",
+    "expected_entities": [],
+    "expected_threats": ["extortion_blackmail", "fraud_scam"]
+  },
+  {
+    "id": "E007",
+    "language": "en",
+    "text": "I want to die.",
+    "expected_entities": [],
+    "expected_threats": ["self_harm_risk"]
+  },
+  {
+    "id": "E008",
+    "language": "hi",
+    "text": "मुझे मारने की धमकी दी गई।",
+    "expected_entities": [],
+    "expected_threats": []
+  },
+  {
+    "id": "E009",
+    "language": "kn",
+    "text": "ನನಗೆ ಬೆದರಿಕೆ ಹಾಕಲಾಗಿದೆ.",
+    "expected_entities": [],
+    "expected_threats": []
+  },
+  {
+    "id": "E010",
+    "language": "en",
+    "text": "This is a normal conversation with no threats.",
+    "expected_entities": [],
+    "expected_threats": []
+  }
+]

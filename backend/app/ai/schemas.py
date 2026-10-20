@@ -1,4 +1,23 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+ThreatCategory = Literal[
+    "violence_threat",
+    "harassment_stalking",
+    "extortion_blackmail",
+    "hate_speech",
+    "fraud_scam",
+    "self_harm_risk",
+]
+
+ThreatSeverity = Literal[
+    "critical",
+    "high",
+    "medium",
+    "low",
+]
 
 
 class Entity(BaseModel):
@@ -9,8 +28,8 @@ class Entity(BaseModel):
 
 
 class ThreatFlag(BaseModel):
-    category: str
-    severity: str
+    category: ThreatCategory
+    severity: ThreatSeverity
     confidence: float = Field(ge=0.0, le=1.0)
     snippet: str
 
