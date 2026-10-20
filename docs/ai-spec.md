@@ -2,91 +2,147 @@
 
 ## Purpose
 
-The AI subsystem converts unstructured digital evidence into structured
-leads that can be reviewed by a human investigator.
+The AI pipeline converts unstructured digital evidence into structured
+investigation leads.
 
-AI output is a lead, not a verdict.
-
-## Initial outputs
-
-The AI system should identify:
+The AI can produce:
 
 - entities
 - threat flags
+- suggested case links
+
+AI output is advisory and always requires human review.
+
+## Entity Extraction
+
+Supported entities:
+
+- email
+- phone
+- handle
+- URL
+
+Every entity contains:
+
+- type
+- value
 - confidence
-- supporting evidence snippets
+- exact source snippet
 
-## Entities
+Entity snippets must occur verbatim in the evidence.
 
-Initial entity types include:
+## Normalization
 
-- handles/usernames
-- phone numbers
-- email addresses
-- URLs
+Entities are normalized before comparison.
 
-Entity extraction should use deterministic methods such as regex where
-possible, with the LLM used for additional context or extraction.
+Supported normalization includes:
 
-## Threat flags
+- Unicode normalization
+- phone normalization
+- email normalization
+- handle normalization
+- URL normalization
 
-Each threat flag should contain:
+Normalization allows equivalent representations to be compared
+during case linking.
+
+## Threat Classification
+
+Supported threat categories:
+
+- violence_threat
+- harassment_stalking
+- extortion_blackmail
+- hate_speech
+- fraud_scam
+- self_harm_risk
+
+Each threat flag contains:
 
 - category
 - severity
 - confidence
-- verbatim supporting snippet
+- exact source snippet
 
-The system must not automatically take action based on a threat flag.
+Severity levels:
 
-## Confidence
+- critical
+- high
+- medium
+- low
 
-Confidence values are represented between 0 and 1.
+Self-harm risk requires human review.
 
-Example:
+## Case Linking
 
-- 0.95 = high confidence
-- 0.50 = uncertain
-- 0.10 = very low confidence
+Cases can receive suggested links when they share a normalized entity.
 
-## Evidence snippets
+Base confidence:
 
-Every snippet returned by the AI must be a verbatim substring of the
-original evidence text.
+- phone: 0.90
+- email: 0.90
+- handle: 0.70
+- URL: 0.60
 
-The system should reject or flag snippets that do not occur in the
-original source.
+Each additional shared entity adds 0.05.
 
-## Human review
+Maximum confidence is 0.99.
 
-AI results are suggestions for human investigators.
+Generic/common entities are ignored.
 
-The AI must never automatically confirm an entity, threat, or case link.
+Links remain suggestions until a human confirms them.
 
-## Safety
+Rejected links are not re-suggested.
 
-The system must not expose secrets or API keys in logs.
+## Pipeline
 
-Real personal data should not be sent to a hosted LLM during development
-unless the data is explicitly approved for that purpose.
+The analysis pipeline:
 
-Synthetic or consented data should be used for the MVP.
+1. receives evidence text
+2. extracts entities
+3. classifies threats
+4. validates snippets
+5. stores generated results
+6. updates analysis status
 
-## LLM availability
+Failures produce a failed analysis result instead of blocking evidence
+processing.
 
-The AI subsystem should support an LLM_ENABLED switch so that the
-application can run without the hosted LLM.
+## Idempotency
+
+Analysis and link jobs use deterministic job keys.
+
+Running the same job again must not create duplicate results.
 
 ## Evaluation
 
-The AI should be evaluated using a labelled test set.
+The AI evaluation set includes:
 
-Evaluation should include:
+- entity extraction cases
+- threat classification cases
+- safe/no-threat cases
+- Hindi cases
+- Kannada cases
 
-- precision
-- recall
-- confusion by class
-- false-positive tracking
-- Hindi examples
-- Kannada examples
-- mixed-script/Hinglish examples
+False positives must be reviewed by a human.
+
+## Human Review
+
+AI output is never automatically confirmed.
+
+Entities, threats, and case links remain pending until reviewed.
+
+Confidence must be visible to investigators.
+
+## Security
+
+The AI layer must not:
+
+- expose secrets
+- log sensitive evidence unnecessarily
+- invent evidence
+- invent snippets
+- automatically make investigative decisions
+
+Hosted LLM processing should use synthetic or consented data during
+the MVP.
