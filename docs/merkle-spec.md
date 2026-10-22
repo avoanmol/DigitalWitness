@@ -1,9 +1,9 @@
 # DigitalWitness Merkle Specification
 
-Status: A-side Merkle, local contract, chain connector, batch ordering, and
-proof verification are implemented. Database-backed worker transactions,
-API endpoints, and running-stack tamper tests require B's shared models,
-storage, audit, and worker services.
+Status: A-side Merkle, local contract, chain connector, batch ordering,
+proof verification, and the local non-destructive tamper demo are implemented.
+Database-backed worker transactions, API endpoints, and running-stack tamper
+tests require the shared models, storage, audit, and worker services.
 
 ## 1. Purpose
 

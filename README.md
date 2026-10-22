@@ -44,7 +44,7 @@ $env:DW_NETWORK = "localhost"
 Remove-Item Env:DW_NETWORK
 ```
 
-The deploy script prints the contract address and writes local output under `contracts/deployments/`. The Python chain client uses `CHAIN_RPC_URL` (default `http://127.0.0.1:8545`), `CHAIN_CONTRACT_ADDRESS`, and a local unlocked `CHAIN_SENDER_ADDRESS`. Do not use Hardhat development keys on public networks or commit credentials/deployment output.
+The deploy script prints the contract address and writes local output under `contracts/deployments/`. The Python chain client uses `CHAIN_RPC_URL` (default `http://127.0.0.1:8545`), `CHAIN_CONTRACT_ADDRESS`, and a local unlocked `CHAIN_SENDER_ADDRESS`. Run the non-destructive tamper demo with `& .\backend\.venv\Scripts\python.exe scripts\tamper_demo.py .\README.md`; it anchors the selected file and simulates a changed copy in memory. Do not use Hardhat development keys on public networks or commit credentials/deployment output.
 
 ## Team boundary
 
