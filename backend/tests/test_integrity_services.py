@@ -23,19 +23,22 @@ class BatcherTests(unittest.TestCase):
         self.start = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
         self.records = [
             {
-                "evidence_id": "evidence-b",
+                "id": "evidence-b",
                 "uploaded_at": self.start + timedelta(seconds=5),
-                "file_sha256_hex": format(2, "064x"),
+                "status": "stored",
+                "sha256": format(2, "064x"),
             },
             {
-                "evidence_id": "evidence-z",
+                "id": "evidence-z",
                 "uploaded_at": self.start,
-                "file_sha256_hex": format(3, "064x"),
+                "status": "stored",
+                "sha256": format(3, "064x"),
             },
             {
-                "evidence_id": "evidence-a",
+                "id": "evidence-a",
                 "uploaded_at": self.start,
-                "file_sha256_hex": format(1, "064x"),
+                "status": "stored",
+                "sha256": format(1, "064x"),
             },
         ]
 
@@ -49,7 +52,7 @@ class BatcherTests(unittest.TestCase):
         with patch(
             "app.integrity.batcher.anchor_root",
             return_value={
-                "batch_id": 4,
+                "chain_batch_id": 4,
                 "transaction_hash": "0x" + "ab" * 32,
                 "block_number": 12,
                 "chain_id": 31337,
@@ -69,6 +72,13 @@ class BatcherTests(unittest.TestCase):
             [leaf_hash(value).hex() for value in ordered_hashes],
         )
         anchor.assert_called_once_with(expected_root, 3)
+
+    def test_non_stored_evidence_rejected_before_anchor(self):
+        received = [dict(self.records[0], status="received")]
+        with patch("app.integrity.batcher.anchor_root") as anchor:
+            with self.assertRaisesRegex(ValueError, "status 'stored'"):
+                anchor_evidence_records(received)
+        anchor.assert_not_called()
 
     def test_duplicate_evidence_id_rejected_before_anchor(self):
         duplicated = self.records + [dict(self.records[0])]

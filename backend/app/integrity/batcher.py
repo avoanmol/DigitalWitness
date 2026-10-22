@@ -22,7 +22,7 @@ class EvidenceProof(TypedDict):
 
 
 class AnchoredBatch(TypedDict):
-    batch_id: int
+    chain_batch_id: int
     root: str
     leaf_count: int
     transaction_hash: str
@@ -39,7 +39,7 @@ class EvidenceRecordProof(TypedDict):
 
 
 class AnchoredEvidenceRecords(TypedDict):
-    batch_id: int
+    chain_batch_id: int
     root: str
     leaf_count: int
     transaction_hash: str
@@ -117,7 +117,7 @@ def anchor_hash_batch(file_sha256_hexes: Sequence[str]) -> AnchoredBatch:
     ]
 
     return {
-        "batch_id": int(result["batch_id"]),
+        "chain_batch_id": int(result["chain_batch_id"]),
         "root": root,
         "leaf_count": len(file_sha256_hexes),
         "transaction_hash": str(result["transaction_hash"]),
@@ -130,28 +130,30 @@ def anchor_hash_batch(file_sha256_hexes: Sequence[str]) -> AnchoredBatch:
 def anchor_evidence_records(
     records: Sequence[Mapping[str, Any]],
 ) -> AnchoredEvidenceRecords:
-    """Sort guide-shaped records, anchor them, and associate proofs by evidence ID."""
+    """Anchor schema-shaped stored evidence and return proofs keyed by evidence ID."""
     if not records:
         raise ValueError("at least one evidence record is required")
+    if any(record.get("status") != "stored" for record in records):
+        raise ValueError("only evidence with status 'stored' can be anchored")
 
     ordered = sorted(
         records,
         key=lambda record: (
             _as_utc(record["uploaded_at"]),
-            str(record["evidence_id"]),
+            str(record["id"]),
         ),
     )
-    identifiers = [str(record["evidence_id"]) for record in ordered]
+    identifiers = [str(record["id"]) for record in ordered]
     if len(set(identifiers)) != len(identifiers):
         raise ValueError("evidence_id values must be unique within a batch")
 
     batch = anchor_hash_batch(
-        [record["file_sha256_hex"] for record in ordered]
+        [record["sha256"] for record in ordered]
     )
 
     evidence_proofs: list[EvidenceRecordProof] = [
         {
-            "evidence_id": record["evidence_id"],
+            "evidence_id": record["id"],
             "leaf_hash": proof["leaf_hash"],
             "leaf_index": proof["leaf_index"],
             "siblings": proof["siblings"],
@@ -160,7 +162,7 @@ def anchor_evidence_records(
     ]
 
     return {
-        "batch_id": batch["batch_id"],
+        "chain_batch_id": batch["chain_batch_id"],
         "root": batch["root"],
         "leaf_count": batch["leaf_count"],
         "transaction_hash": batch["transaction_hash"],

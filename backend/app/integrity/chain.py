@@ -21,7 +21,7 @@ class ChainError(RuntimeError):
 
 class AnchorReceipt(TypedDict):
     transaction_hash: str
-    batch_id: int
+    chain_batch_id: int
     block_number: int
     chain_id: int
 
@@ -167,7 +167,7 @@ def _wait_for_receipt(
         if int(receipt["status"], 16) != 1:
             raise ChainError(f"Anchor transaction reverted: {transaction_hash}")
 
-        batch_id = _anchor_event(receipt, root, leaf_count)
+        chain_batch_id = _anchor_event(receipt, root, leaf_count)
         block_number = int(receipt["blockNumber"], 16)
 
         while time.monotonic() < deadline:
@@ -175,7 +175,7 @@ def _wait_for_receipt(
             if latest_block >= block_number + confirmations - 1:
                 return {
                     "transaction_hash": transaction_hash,
-                    "batch_id": batch_id,
+                    "chain_batch_id": chain_batch_id,
                     "block_number": block_number,
                     "chain_id": chain_id,
                 }
@@ -195,14 +195,14 @@ def get_batch_count() -> int:
     return int(result, 16)
 
 
-def get_batch(batch_id: int) -> dict[str, int | str]:
-    if not isinstance(batch_id, int) or isinstance(batch_id, bool):
-        raise ValueError("batch_id must be an integer")
-    if not 1 <= batch_id < 2**256:
-        raise ValueError("batch_id must be between 1 and 2**256 - 1")
+def get_batch(chain_batch_id: int) -> dict[str, int | str]:
+    if not isinstance(chain_batch_id, int) or isinstance(chain_batch_id, bool):
+        raise ValueError("chain_batch_id must be an integer")
+    if not 1 <= chain_batch_id < 2**256:
+        raise ValueError("chain_batch_id must be between 1 and 2**256 - 1")
 
     _, contract = _connection()
-    calldata = GET_BATCH_SELECTOR + format(batch_id, "064x")
+    calldata = GET_BATCH_SELECTOR + format(chain_batch_id, "064x")
     result = _rpc(
         "eth_call",
         [{"to": contract, "data": calldata}, "latest"],

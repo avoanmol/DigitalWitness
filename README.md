@@ -4,7 +4,7 @@ DigitalWitness preserves digital evidence and checks whether it has changed sinc
 
 ## Status
 
-Member A's integrity services, `EvidenceAnchor` contract, local Hardhat setup, and focused tests are on `feat/a-merkle-contract`. API routes, database persistence and migrations, object storage, audit logging, and worker integration depend on the shared backend and finalized schema. The API and database documents in `docs/` are proposals, not migrations or live endpoints.
+Member A's integrity services, `EvidenceAnchor` contract, local Hardhat setup, and focused tests are on `feat/a-merkle-contract`. The supplied schema reference includes the shared Merkle tables and `anchor` jobs. Database-backed worker and API integration still need to be connected to the backend's Alembic models and routes; the documents in `docs/` are coordination notes, not migrations or live endpoints.
 
 ## Integrity rules
 
@@ -48,4 +48,4 @@ The deploy script prints the contract address and writes local output under `con
 
 ## Team boundary
 
-Member B owns the shared schema and migration history. Agree on the final schema before wiring persistence; add integrity tables to the existing migrations. Coordinate API shapes with the teammate responsible for the API. Do not create a separate migration history.
+Use the existing `evidence`, `jobs`, `merkle_batches`, `merkle_proofs`, and `verifications` tables. The schema PDF is a reference; confirm exact types and constraints from the Alembic migration before persistence changes. Member B owns the shared schema and migrations. Coordinate route shapes with the API owner; do not create a separate migration history.

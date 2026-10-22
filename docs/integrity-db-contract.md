@@ -1,68 +1,40 @@
-# Integrity database contract for B
+# Integrity database contract alignment
 
-Status: proposal for B to incorporate into the shared Alembic migration chain.
-This file defines A-owned data needs only; it does not create migrations.
+This document maps Member A's integrity services to the shared schema described in `DigitalWitness_Database_Schema.pdf`. The PDF reports that the shared Alembic migration is applied and includes the tables below. It is a readable reference, not the DDL source of truth; use the actual Alembic migration and models for exact types, nullability, constraints, and indexes. Member A does not create a separate migration history.
 
-The names and relationships below follow the team guide. The evidence table
-remains B-owned and is assumed to expose id, sha256, status, and uploaded_at.
-B owns all migrations and resolves final column types and constraints with A.
+## Existing shared records
 
-## merkle_batches
+- `evidence`: use `id`, `sha256`, `status`, and `uploaded_at`. The worker selects only `status = 'stored'` evidence that has no `merkle_proofs` row. The stored digest is 64 lowercase hex characters without `0x`.
+- `jobs`: enqueue work with `type = 'anchor'` and the schema's existing `queued`, `running`, `done`, and `failed` lifecycle. Use `attempts`, `max_attempts`, `run_after`, and `last_error` for retry handling. Apply the guide's 5, 15, and 45 second retry delays through `run_after`.
 
-| Column | Suggested type | Requirements |
-| --- | --- | --- |
-| id | UUID | Primary key, generated UUID v4 |
-| chain_batch_id | NUMERIC(78, 0), nullable | uint256 from RootAnchored; unique with chain_id after confirmation |
-| root_hash | CHAR(66) | Lowercase 0x plus 64 hex characters |
-| leaf_count | BIGINT | Between 1 and 4,294,967,295 |
-| tx_hash | CHAR(66), nullable | Transaction hash |
-| chain_id | BIGINT | Network identifier |
-| block_number | BIGINT, nullable | Receipt block |
-| status | TEXT | building, submitted, confirmed, or failed |
-| created_at | TIMESTAMPTZ | UTC, default current time |
-| anchored_at | TIMESTAMPTZ, nullable | Time from the confirmed batch |
+## `merkle_batches`
 
-Indexes: (status, created_at) for worker candidate processing; unique
-(chain_id, chain_batch_id) when chain_batch_id is present.
+| Schema field | Integrity use |
+| --- | --- |
+| `id` | Database UUID primary key; API `batch_id` |
+| `chain_batch_id` | Nullable on-chain uint256 returned by `RootAnchored`; distinct from `id` |
+| `root_hash` | Merkle root; store `0x` plus 64 lowercase hex characters |
+| `leaf_count` | Number of evidence leaves in the batch |
+| `tx_hash` | Nullable transaction hash |
+| `chain_id` | Blockchain network identifier |
+| `block_number` | Nullable receipt block number |
+| `status` | `building`, `submitted`, `confirmed`, or `failed` |
+| `created_at`, `anchored_at` | UTC timestamps; `anchored_at` remains null until confirmed |
 
-## merkle_proofs
+## `merkle_proofs`
 
-| Column | Suggested type | Requirements |
-| --- | --- | --- |
-| evidence_id | UUID | Unique FK to evidence.id, delete restricted |
-| batch_id | UUID | FK to merkle_batches.id, delete restricted |
-| leaf_index | BIGINT | Zero-based index in the ordered batch |
-| leaf_hash | CHAR(64) | Lowercase digest without 0x |
-| proof | JSONB | Ordered array; hash is 64 lowercase hex without 0x, side is left or right |
+- `evidence_id` is the primary key and a restricted foreign key to `evidence.id`.
+- `batch_id` references `merkle_batches.id`; it is a database UUID, not the on-chain ID.
+- `leaf_index` is zero-based and unique within a batch.
+- `leaf_hash` is 64 lowercase hex characters without `0x`.
+- `proof` is JSONB containing ordered `{ "hash": "<64 lowercase hex>", "side": "left" | "right" }` entries.
 
-The worker orders candidates by uploaded_at ASC, evidence.id ASC. It stores
-that order in leaf_index and uses it to construct each proof.
+The worker sorts by `evidence.uploaded_at ASC, evidence.id ASC`. `batcher.anchor_evidence_records` accepts the schema-shaped fields `id`, `sha256`, `status`, and `uploaded_at`, and returns `evidence_id`, `leaf_index`, `leaf_hash`, and proof data.
 
-## verifications
+## `verifications`
 
-| Column | Suggested type | Requirements |
-| --- | --- | --- |
-| id | UUID | Primary key, generated UUID v4 |
-| evidence_id | UUID | FK to evidence.id, delete restricted |
-| requested_by | UUID, nullable | Requesting user FK where available |
-| result | TEXT | verified, altered, pending, or error |
-| recomputed_hash | CHAR(64), nullable | Lowercase digest without 0x |
-| expected_hash | CHAR(64), nullable | Upload-time digest without 0x |
-| computed_root | CHAR(66), nullable | Lowercase root with 0x |
-| onchain_root | CHAR(66), nullable | Lowercase root with 0x |
-| reason | TEXT, nullable | Human-readable explanation |
-| checked_at | TIMESTAMPTZ | UTC, default current time |
+Store every attempt with `id`, `evidence_id`, nullable `requested_by`, `result`, nullable `recomputed_hash`, `expected_hash`, `computed_root`, `onchain_root`, nullable `reason`, and `checked_at`. Results are exactly `verified`, `altered`, `pending`, or `error`. Storage and RPC failures are `error`, never `altered`.
 
-## Worker handoff
+## Persistence handoff
 
-A selects evidence rows with status stored and no proof, ordered by
-uploaded_at, id, using B's shared job and row-locking infrastructure.
-A returns the confirmed transaction hash, chain batch ID, chain ID, block,
-leaf count, root, and each evidence_id, leaf_index, leaf_hash, and proof.
-B's migration and transaction code persists those values and updates evidence
-status; A does not create a separate migration chain.
-
-A failed or unconfirmed RPC result must not mark evidence altered.
-Verification returns pending without a proof, altered for a mismatch,
-and error when the chain or storage cannot be checked.
-
+Persist a building batch and its proof rows using the shared transaction and job infrastructure. After the chain transaction reaches the required confirmation count, save `chain_batch_id`, transaction hash, chain ID, block number, and `anchored_at`, then mark the batch confirmed and evidence anchored. A failed or unconfirmed chain operation must not create verified proofs or mark evidence altered; leave retry and failure handling to the shared jobs policy.

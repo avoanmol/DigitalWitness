@@ -31,7 +31,7 @@ class ChainTests(unittest.TestCase):
             ],
         }
 
-    def test_anchor_reads_batch_id_from_event_and_returns_block(self):
+    def test_anchor_reads_chain_batch_id_from_event_and_returns_block(self):
         environment = {
             "CHAIN_RPC_URL": "http://127.0.0.1:8545",
             "CHAIN_CONTRACT_ADDRESS": "0x" + "11" * 20,
@@ -50,7 +50,7 @@ class ChainTests(unittest.TestCase):
                 result = anchor_root(self.root, 4)
 
         self.assertEqual(result["transaction_hash"], self.transaction_hash)
-        self.assertEqual(result["batch_id"], 5)
+        self.assertEqual(result["chain_batch_id"], 5)
         self.assertEqual(result["block_number"], 10)
         self.assertEqual(result["chain_id"], 31337)
 

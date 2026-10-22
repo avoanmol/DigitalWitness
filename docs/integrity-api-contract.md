@@ -1,8 +1,8 @@
-# Integrity API contract proposal for B and D
+# Integrity API contract proposal
 
 This is A's proposal for the shared API contract. B owns the FastAPI router,
 authentication, authorization, audit logging, and the canonical
-docs/api-contract.md. These shapes can be copied there when that file is ready.
+docs/api-contract.md. Coordinate these proposed shapes with the shared API owner before implementation.
 
 All timestamps are UTC ISO 8601 strings ending in Z. Hashes are 64 lowercase
 hexadecimal characters without 0x. Roots and transaction hashes are

@@ -119,7 +119,7 @@ def verify_integrity(
 def verify_evidence(
     file_sha256_hex: str,
     proof: Sequence[ProofStep],
-    batch_id: int,
+    chain_batch_id: int,
 ) -> bool:
     """Compatibility helper for a hash/proof pair that is already re-computed."""
     return (
@@ -127,7 +127,7 @@ def verify_evidence(
             expected_hash=file_sha256_hex,
             recomputed_hash=file_sha256_hex,
             proof=proof,
-            chain_batch_id=batch_id,
+            chain_batch_id=chain_batch_id,
         )["result"]
         == "verified"
     )
