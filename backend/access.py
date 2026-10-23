@@ -2,8 +2,12 @@
 
 
 def can_access_case(user: object, case: object) -> bool:
-    """Allow case creators and administrators until membership is modeled."""
+    """Reporters can access their own cases; investigation roles can access all cases."""
+    role = getattr(user, "role", None)
+    if role in {"investigator", "legal", "admin"}:
+        return True
+
     return (
-        getattr(user, "role", None) == "admin"
-        or getattr(user, "id", None) == getattr(case, "created_by", None)
+        role == "reporter"
+        and getattr(user, "id", None) == getattr(case, "created_by", None)
     )
