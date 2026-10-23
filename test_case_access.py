@@ -21,9 +21,24 @@ class CaseAccessTests(unittest.TestCase):
             can_access_case(SimpleNamespace(id=self.other_id, role="admin"), self.case)
         )
 
-    def test_unrelated_user_cannot_access_case(self):
+    def test_investigator_can_access_another_users_case(self):
+        self.assertTrue(
+            can_access_case(SimpleNamespace(id=self.other_id, role="investigator"), self.case)
+        )
+
+    def test_legal_user_can_access_another_users_case(self):
+        self.assertTrue(
+            can_access_case(SimpleNamespace(id=self.other_id, role="legal"), self.case)
+        )
+
+    def test_unrelated_reporter_cannot_access_case(self):
         self.assertFalse(
             can_access_case(SimpleNamespace(id=self.other_id, role="reporter"), self.case)
+        )
+
+    def test_unknown_role_cannot_access_even_owned_case(self):
+        self.assertFalse(
+            can_access_case(SimpleNamespace(id=self.owner_id, role="unknown"), self.case)
         )
 
 
