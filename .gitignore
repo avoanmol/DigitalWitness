@@ -219,8 +219,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Node.js dependencies
-node_modules/
-artifacts/
-cache/
-typechain-types/
+# Python cache files
+__pycache__/
+*.py[cod]
+node_modules
