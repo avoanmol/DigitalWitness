@@ -1,0 +1,30 @@
+{
+  "name": "digitalwitness",
+  "version": "1.0.0",
+  "description": "AI-assisted digital evidence preservation, integrity verification, and threat investigation platform using computer vision, OCR, and blockchain.",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avoanmol/DigitalWitness.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/avoanmol/DigitalWitness/issues"
+  },
+  "homepage": "https://github.com/avoanmol/DigitalWitness#readme",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.1.9",
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",
+    "@types/node": "^22.20.5",
+    "forge-std": "github:foundry-rs/forge-std#v1.16.2",
+    "hardhat": "^3.20.0",
+    "typescript": "~6.0.3",
+    "viem": "^2.57.7"
+  }
+}
