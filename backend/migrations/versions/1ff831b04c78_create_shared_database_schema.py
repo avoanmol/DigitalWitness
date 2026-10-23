@@ -497,6 +497,8 @@ def upgrade() -> None:
 def downgrade() -> None:
 
     """Downgrade schema."""
+    op.execute("DROP TRIGGER IF EXISTS trg_audit_log_append_only ON audit_log")
+    op.execute("DROP TRIGGER IF EXISTS trg_evidence_immutable ON evidence")
     op.execute("DROP FUNCTION IF EXISTS protect_evidence_immutability()")
     op.execute("DROP FUNCTION IF EXISTS prevent_audit_log_mutation()")
 

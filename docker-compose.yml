@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: dw
       POSTGRES_USER: dw
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dw_local_dev_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_local_password}
     ports:
       - "5432:5432"
     volumes:

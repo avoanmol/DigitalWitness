@@ -4,13 +4,14 @@ import json
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from backend.models import AuditLog
 
 
 GENESIS_HASH = "0" * 64
+AUDIT_CHAIN_LOCK_KEY = 0x41554449  # ASCII "AUDI"; shared by every app worker.
 
 
 def append_audit_event(
@@ -26,6 +27,13 @@ def append_audit_event(
     details: dict[str, Any] | None = None,
 ) -> AuditLog:
     """Append an audit event linked to the previous event's hash."""
+
+    # Serialize appends across processes, including the first append when the
+    # table is empty. PostgreSQL releases this lock at transaction end.
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": AUDIT_CHAIN_LOCK_KEY},
+    )
 
     previous = db.scalar(
         select(AuditLog).order_by(AuditLog.seq.desc()).limit(1)

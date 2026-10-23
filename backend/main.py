@@ -1,12 +1,16 @@
 
 import hashlib
+import hmac
+import logging
 import os
+import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -19,23 +23,27 @@ from backend.auth import (
     hash_password,
     verify_password,
 )
+from backend.access import can_access_case
 from backend.database import SessionLocal
-from backend.models import Case,Evidence,User
+from backend.login_limits import clear_email_attempts, consume_login_attempt
+from backend.models import Case, Evidence, User
 from backend.security import encrypt_evidence
-from backend.storage import store_encrypted_evidence
-import secrets
-import hmac
-import hashlib
-import base64
+from backend.storage import delete_encrypted_evidence, store_encrypted_evidence
+
 app = FastAPI(
     title="DigitalWitness API",
     description="Backend for secure digital evidence preservation.",
     version="0.2.0",
 )
 
-MAX_FILE_SIZE = 10 * 1024 * 1024
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+if MAX_UPLOAD_MB < 1:
+    raise RuntimeError("MAX_UPLOAD_MB must be a positive integer.")
+MAX_FILE_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 ALLOWED_TYPES = {".jpg", ".jpeg", ".png", ".pdf"}
 bearer_scheme = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
+DUMMY_PASSWORD_HASH = hash_password("digitalwitness-invalid-login-dummy-password")
 
 
 class RegisterRequest(BaseModel):
@@ -192,7 +200,7 @@ def create_case(
         )
 
     case = Case(
-        case_ref=f"DW-{__import__('datetime').datetime.now().year}-{UUID(int=__import__('uuid').uuid4().int).hex[:8].upper()}",
+        case_ref=f"DW-{datetime.now(timezone.utc).year}-{secrets.token_hex(10).upper()}",
         title=title,
         description=payload.description,
         status="open",
@@ -206,21 +214,29 @@ def create_case(
     return case
 
 @app.post("/auth/login")
-def login_user(payload: LoginRequest, db: DBSession):
+def login_user(payload: LoginRequest, request: Request, db: DBSession):
     email = str(payload.email).strip().lower()
-    user = db.scalar(select(User).where(User.email == email))
+    ip_address = request.client.host if request.client else "unknown"
+    retry_after = consume_login_attempt(email, ip_address)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
-    if (
-        user is None
-        or not user.is_active
-        or not verify_password(payload.password, user.password_hash)
-    ):
+    user = db.scalar(select(User).where(User.email == email))
+    stored_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    password_matches = verify_password(payload.password, stored_hash)
+
+    if user is None or not user.is_active or not password_matches:
         raise HTTPException(
             status_code=401,
             detail="Incorrect email or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    clear_email_attempts(email)
     token = create_access_token(user.id, user.role)
 
     return {
@@ -238,32 +254,32 @@ def get_my_profile(
 
 
 @app.post("/evidence/upload", status_code=status.HTTP_201_CREATED)
-async def upload_evidence(
+def upload_evidence(
     case_id: UUID,
     file: UploadFile = File(...),
-    current_user: Annotated[User, Depends(get_current_user)] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     filename = Path(file.filename or "").name
     extension = Path(filename).suffix.lower()
 
     if not filename or len(filename) > 255:
-        await file.close()
+        file.file.close()
         raise HTTPException(
             status_code=400,
             detail="A valid filename of at most 255 characters is required.",
         )
 
     if extension not in ALLOWED_TYPES:
-        await file.close()
+        file.file.close()
         raise HTTPException(
             status_code=400,
             detail="Unsupported file type. Upload JPG, PNG, or PDF.",
         )
 
     case = db.get(Case, case_id)
-    if case is None:
-        await file.close()
+    if case is None or not can_access_case(current_user, case):
+        file.file.close()
         raise HTTPException(status_code=404, detail="Case not found.")
 
     sha256 = hashlib.sha256()
@@ -271,7 +287,7 @@ async def upload_evidence(
 
     try:
         while True:
-            chunk = await file.read(1024 * 1024)
+            chunk = file.file.read(1024 * 1024)
             if not chunk:
                 break
 
@@ -280,25 +296,34 @@ async def upload_evidence(
             if len(original_data) > MAX_FILE_SIZE:
                 raise HTTPException(
                     status_code=413,
-                    detail="File too large. Maximum size is 10 MB.",
+                    detail=f"File too large. Maximum size is {MAX_UPLOAD_MB} MB.",
                 )
 
             sha256.update(chunk)
     finally:
-        await file.close()
+        file.file.close()
 
     original_bytes = bytes(original_data)
+    if not original_bytes:
+        raise HTTPException(status_code=400, detail="Empty files cannot be uploaded.")
+
+    receipt_key = os.getenv("RECEIPT_HMAC_KEY")
+    if not receipt_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Evidence receipt signing is not configured.",
+        )
+
     encrypted_data, nonce = encrypt_evidence(original_bytes)
 
     storage_key = f"cases/{case_id}/evidence/{secrets.token_hex(16)}"
     object_data = nonce + encrypted_data
 
+    stored = False
+    committed = False
     try:
         store_encrypted_evidence(storage_key, object_data)
-
-        receipt_key = os.getenv("RECEIPT_HMAC_KEY")
-        if not receipt_key:
-            raise RuntimeError("RECEIPT_HMAC_KEY is not configured.")
+        stored = True
 
         digest = sha256.hexdigest()
         signature = hmac.new(
@@ -326,6 +351,7 @@ async def upload_evidence(
 
         db.add(evidence)
         db.commit()
+        committed = True
         db.refresh(evidence)
 
         return {
@@ -339,5 +365,11 @@ async def upload_evidence(
         }
 
     except Exception:
-        db.rollback()
+        if not committed:
+            db.rollback()
+        if stored and not committed:
+            try:
+                delete_encrypted_evidence(storage_key)
+            except Exception:
+                logger.exception("Failed to remove orphaned evidence object %s", storage_key)
         raise

@@ -73,3 +73,10 @@ def get_encrypted_evidence(storage_key: str) -> bytes:
     )
 
     return response["Body"].read()
+
+
+def delete_encrypted_evidence(storage_key: str) -> None:
+    """Remove an uploaded object when its database transaction fails."""
+    client = get_s3_client()
+    bucket = os.getenv("MINIO_BUCKET", "evidence")
+    client.delete_object(Bucket=bucket, Key=storage_key)
