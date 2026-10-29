@@ -1,5 +1,1 @@
-from .service import AIAnalysisService
-
-__all__ = [
-    "AIAnalysisService",
-]
+"""AI-assisted evidence analysis and case linking."""

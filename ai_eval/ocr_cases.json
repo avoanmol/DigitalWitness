@@ -1,0 +1,26 @@
+[
+  {
+    "id": "ocr-threat-image",
+    "format": "png",
+    "text": "You keep posting. Stop now or I will share your private photos.",
+    "expected_threat": true
+  },
+  {
+    "id": "ocr-safe-quote",
+    "format": "png",
+    "text": "The guide says: do not threaten anyone. I am watching you is an example.",
+    "expected_threat": false
+  },
+  {
+    "id": "ocr-handle-pdf",
+    "format": "pdf",
+    "text": "Repeated messages came from @sample_case_01. Please preserve this screenshot.",
+    "expected_threat": false
+  },
+  {
+    "id": "ocr-blackmail-pdf",
+    "format": "pdf",
+    "text": "Pay or else I will leak your photos tonight.",
+    "expected_threat": true
+  }
+]

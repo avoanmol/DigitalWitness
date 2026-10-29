@@ -1,4 +1,6 @@
 import unittest
+import hashlib
+import json
 from uuid import uuid4
 
 from backend.audit import (
@@ -28,6 +30,8 @@ class FakeSession:
         self.operations.append(("lock", str(statement), parameters))
 
     def scalar(self, _statement):
+        if "nextval" in str(_statement):
+            return len(self.entries) + 1
         self.operations.append(("read_latest",))
         return max(self.entries, key=lambda entry: entry.seq, default=None)
 
@@ -55,6 +59,17 @@ class AuditChainTests(unittest.TestCase):
 
         self.assertEqual(first.prev_hash, GENESIS_HASH)
         self.assertEqual(second.prev_hash, first.entry_hash)
+        self.assertNotEqual(first.entry_hash, hashlib.sha256(json.dumps({
+            "action": first.action,
+            "target_type": first.target_type,
+            "target_id": first.target_id,
+            "actor_id": None,
+            "actor_role": None,
+            "case_id": None,
+            "ip": None,
+            "details": {"step": 1},
+            "prev_hash": GENESIS_HASH,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest())
         self.assertTrue(verify_audit_chain(db)["valid"])
 
         second.details = {"step": "tampered"}
@@ -70,6 +85,35 @@ class AuditChainTests(unittest.TestCase):
         self.assertIn("pg_advisory_xact_lock", db.operations[0][1])
         self.assertEqual(db.operations[0][2], {"lock_key": AUDIT_CHAIN_LOCK_KEY})
         self.assertEqual(db.operations[1], ("read_latest",))
+
+    def test_new_hash_covers_sequence_and_timestamp(self):
+        db = FakeSession()
+        event = append_audit_event(db, action="test.timestamp", target_type="system")
+        original = event.entry_hash
+        event.created_at = event.created_at.replace(microsecond=(event.created_at.microsecond + 1) % 1_000_000)
+        result = verify_audit_chain(db)
+        self.assertFalse(result["valid"])
+        self.assertEqual(event.entry_hash, original)
+
+    def test_old_hash_format_remains_verifiable(self):
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+
+        payload = {
+            "action": "legacy.event", "target_type": "system", "target_id": None,
+            "actor_id": None, "actor_role": None, "case_id": None, "ip": None,
+            "details": {}, "prev_hash": GENESIS_HASH,
+        }
+        entry = SimpleNamespace(
+            id=uuid4(), seq=1, action="legacy.event", target_type="system",
+            target_id=None, actor_id=None, actor_role=None, case_id=None, ip=None,
+            details={}, prev_hash=GENESIS_HASH,
+            entry_hash=hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest(),
+            created_at=datetime.now(timezone.utc),
+        )
+        db = FakeSession()
+        db.entries.append(entry)
+        self.assertTrue(verify_audit_chain(db)["valid"])
 
 
 if __name__ == "__main__":

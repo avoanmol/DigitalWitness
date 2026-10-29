@@ -1,0 +1,28 @@
+{"id": "holdout-01", "split": "held_out_challenge", "language": "en", "scenario": "harassment_stalking", "expected_threat": true, "text": "I know your commute and will be waiting at your stop every day."}
+{"id": "holdout-02", "split": "held_out_challenge", "language": "en", "scenario": "harassment_stalking", "expected_threat": true, "text": "I have been tracking your location. Block me and I will still find you."}
+{"id": "holdout-03", "split": "held_out_challenge", "language": "hi", "scenario": "harassment_stalking", "expected_threat": true, "text": "मैं तुम्हारा पीछा करता रहूँगा, तुम जहां जाओगे मैं वहां आऊंगा।"}
+{"id": "holdout-04", "split": "held_out_challenge", "language": "kn", "scenario": "harassment_stalking", "expected_threat": true, "text": "ನೀನು ಎಲ್ಲಿಗೆ ಹೋದರೂ ನಾನು ಹಿಂಬಾಲಿಸುತ್ತೇನೆ."}
+{"id": "holdout-05", "split": "held_out_challenge", "language": "en", "scenario": "extortion_blackmail", "expected_threat": true, "text": "Pay by midnight or I send your private photos to your family."}
+{"id": "holdout-06", "split": "held_out_challenge", "language": "en", "scenario": "extortion_blackmail", "expected_threat": true, "text": "I will blackmail you with these screenshots unless you transfer cash."}
+{"id": "holdout-07", "split": "held_out_challenge", "language": "hi", "scenario": "extortion_blackmail", "expected_threat": true, "text": "पैसे नहीं दिए तो तुम्हारी तस्वीरें वायरल कर दूंगा।"}
+{"id": "holdout-08", "split": "held_out_challenge", "language": "kn", "scenario": "extortion_blackmail", "expected_threat": true, "text": "ಹಣ ಕೊಡದಿದ್ದರೆ ನಿಮ್ಮ ಖಾಸಗಿ ಚಿತ್ರಗಳನ್ನು ಹರಡುತ್ತೇನೆ."}
+{"id": "holdout-09", "split": "held_out_challenge", "language": "en", "scenario": "intimate_image_abuse", "expected_threat": true, "text": "I will share your private photos without your consent."}
+{"id": "holdout-10", "split": "held_out_challenge", "language": "en", "scenario": "intimate_image_abuse", "expected_threat": true, "text": "I am uploading your intimate video to the class group tonight."}
+{"id": "holdout-11", "split": "held_out_challenge", "language": "hi", "scenario": "intimate_image_abuse", "expected_threat": true, "text": "तुम्हारी निजी तस्वीरें मैं तुम्हारे सहकर्मियों को भेजूंगा।"}
+{"id": "holdout-12", "split": "held_out_challenge", "language": "kn", "scenario": "intimate_image_abuse", "expected_threat": true, "text": "ನಾನು ನಿಮ್ಮ ಖಾಸಗಿ ವಿಡಿಯೋವನ್ನು ಗುಂಪಿಗೆ ಹಾಕುತ್ತೇನೆ."}
+{"id": "holdout-13", "split": "held_out_challenge", "language": "en", "scenario": "fake_profile_impersonation", "expected_threat": true, "text": "I made a fake profile with your name to contact your friends."}
+{"id": "holdout-14", "split": "held_out_challenge", "language": "en", "scenario": "fake_profile_impersonation", "expected_threat": true, "text": "I am impersonating you to message your coworkers."}
+{"id": "holdout-15", "split": "held_out_challenge", "language": "hi", "scenario": "fake_profile_impersonation", "expected_threat": true, "text": "मैं तुम्हारे नाम से नकली खाता बनाकर सबको संदेश भेज रहा हूँ।"}
+{"id": "holdout-16", "split": "held_out_challenge", "language": "kn", "scenario": "fake_profile_impersonation", "expected_threat": true, "text": "ನಿಮ್ಮ ಹೆಸರಿನಲ್ಲಿ ನಕಲಿ ಖಾತೆ ತೆರೆದು ನಿಮ್ಮ ಸ್ನೇಹಿತರಿಗೆ ಸಂದೇಶ ಕಳುಹಿಸುತ್ತಿದ್ದೇನೆ."}
+{"id": "holdout-17", "split": "held_out_challenge", "language": "en", "scenario": "defamation_morphing", "expected_threat": true, "text": "I edited your face into an explicit picture and sent it around."}
+{"id": "holdout-18", "split": "held_out_challenge", "language": "en", "scenario": "defamation_morphing", "expected_threat": true, "text": "I made a fake screenshot accusing you of taking money."}
+{"id": "holdout-19", "split": "held_out_challenge", "language": "hi", "scenario": "defamation_morphing", "expected_threat": true, "text": "मैंने तुम्हारी छवि बिगाड़कर नकली तस्वीर पोस्ट की।"}
+{"id": "holdout-20", "split": "held_out_challenge", "language": "kn", "scenario": "defamation_morphing", "expected_threat": true, "text": "ನಿಮ್ಮ ಬಗ್ಗೆ ಸುಳ್ಳು ಹೇಳುವಂತೆ ಸಂಪಾದಿಸಿದ ಚಿತ್ರವನ್ನು ಹಂಚಿದ್ದೇನೆ."}
+{"id": "holdout-21", "split": "held_out_challenge", "language": "en", "scenario": "hard_negative", "expected_threat": false, "text": "Safety training says: do not threaten anyone. Report abuse instead."}
+{"id": "holdout-22", "split": "held_out_challenge", "language": "en", "scenario": "hard_negative", "expected_threat": false, "text": "I reported a scam account; it did not threaten or contact me."}
+{"id": "holdout-23", "split": "held_out_challenge", "language": "en", "scenario": "hard_negative", "expected_threat": false, "text": "In a film, a character says 'I will kill you'; this is a movie quote."}
+{"id": "holdout-24", "split": "held_out_challenge", "language": "hi", "scenario": "hard_negative", "expected_threat": false, "text": "किसी को धमकी मत दो; यह सिर्फ जागरूकता संदेश है।"}
+{"id": "holdout-25", "split": "held_out_challenge", "language": "hi", "scenario": "hard_negative", "expected_threat": false, "text": "मैंने धोखाधड़ी की रिपोर्ट दर्ज की है और अब सुरक्षित हूं।"}
+{"id": "holdout-26", "split": "held_out_challenge", "language": "kn", "scenario": "hard_negative", "expected_threat": false, "text": "ಬೆದರಿಕೆ ನೀಡಬೇಡಿ; ಇದು ಸುರಕ್ಷತಾ ಜಾಗೃತಿ ಸಂದೇಶ."}
+{"id": "holdout-27", "split": "held_out_challenge", "language": "kn", "scenario": "hard_negative", "expected_threat": false, "text": "ನಾನು ವಂಚನೆಯನ್ನು ವರದಿ ಮಾಡಿದ್ದೇನೆ; ಇದು ಶಿಕ್ಷಣದ ಉದಾಹರಣೆ."}
+{"id": "holdout-28", "split": "held_out_challenge", "language": "en", "scenario": "hard_negative", "expected_threat": false, "text": "This account may be fake; verify the source before sharing."}

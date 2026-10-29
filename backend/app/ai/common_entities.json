@@ -1,11 +1,1 @@
-{
-  "url": [
-    "https://google.com",
-    "https://youtube.com",
-    "https://facebook.com",
-    "https://instagram.com"
-  ],
-  "phone": [],
-  "email": [],
-  "handle": []
-}
+{"common_url_domains":["facebook.com","instagram.com","x.com","twitter.com","tiktok.com","youtube.com","youtu.be","whatsapp.com","telegram.org","t.me","google.com","linkedin.com","reddit.com","discord.com","snapchat.com","pinterest.com","microsoft.com","apple.com"]}

@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
-from typing import Any, TypedDict
+from typing import Any, Callable, TypedDict
 
-from .chain import anchor_root
+from .chain import SubmissionUnknown, TransactionReverted, anchor_root, submit_root, wait_for_anchor
 from .merkle import ProofStep, build_levels, get_proof, leaf_hash
 
 
@@ -127,47 +127,153 @@ def anchor_hash_batch(file_sha256_hexes: Sequence[str]) -> AnchoredBatch:
     }
 
 
-def anchor_evidence_records(
+def prepare_evidence_records(
     records: Sequence[Mapping[str, Any]],
-) -> AnchoredEvidenceRecords:
-    """Anchor schema-shaped stored evidence and return proofs keyed by evidence ID."""
+) -> tuple[list[Mapping[str, Any]], dict[str, Any]]:
+    """Build a deterministic root and proofs without making a chain call."""
     if not records:
         raise ValueError("at least one evidence record is required")
     if any(record.get("status") != "stored" for record in records):
-        raise ValueError("only evidence with status 'stored' can be anchored")
+        raise ValueError("only evidence with status 'stored' can be batched")
 
     ordered = sorted(
         records,
-        key=lambda record: (
-            _as_utc(record["uploaded_at"]),
-            str(record["id"]),
-        ),
+        key=lambda record: (_as_utc(record["uploaded_at"]), str(record["id"])),
     )
     identifiers = [str(record["id"]) for record in ordered]
     if len(set(identifiers)) != len(identifiers):
         raise ValueError("evidence_id values must be unique within a batch")
 
-    batch = anchor_hash_batch(
-        [record["sha256"] for record in ordered]
-    )
-
+    levels = build_levels([record["sha256"] for record in ordered])
+    root = "0x" + levels[-1][0].hex()
     evidence_proofs: list[EvidenceRecordProof] = [
         {
             "evidence_id": record["id"],
-            "leaf_hash": proof["leaf_hash"],
-            "leaf_index": proof["leaf_index"],
-            "siblings": proof["siblings"],
+            "leaf_hash": leaf_hash(record["sha256"]).hex(),
+            "leaf_index": index,
+            "siblings": get_proof(levels, index),
         }
-        for record, proof in zip(ordered, batch["proofs"], strict=True)
+        for index, record in enumerate(ordered)
     ]
-
-    return {
-        "chain_batch_id": batch["chain_batch_id"],
-        "root": batch["root"],
-        "leaf_count": batch["leaf_count"],
-        "transaction_hash": batch["transaction_hash"],
-        "block_number": batch["block_number"],
-        "chain_id": batch["chain_id"],
+    return ordered, {
+        "root": root,
+        "leaf_count": len(ordered),
         "evidence_proofs": evidence_proofs,
     }
 
+
+def anchor_evidence_records(
+    records: Sequence[Mapping[str, Any]],
+) -> AnchoredEvidenceRecords:
+    """Legacy synchronous helper; staged database flows use the service below."""
+    _, prepared = prepare_evidence_records(records)
+    result = anchor_root(prepared["root"], prepared["leaf_count"])
+    return {
+        "chain_batch_id": int(result["chain_batch_id"]),
+        "root": prepared["root"],
+        "leaf_count": prepared["leaf_count"],
+        "transaction_hash": str(result["transaction_hash"]),
+        "block_number": int(result["block_number"]),
+        "chain_id": int(result["chain_id"]),
+        "evidence_proofs": prepared["evidence_proofs"],
+    }
+
+
+class PersistedAnchoredEvidenceRecords(AnchoredEvidenceRecords):
+    batch_id: str
+
+
+def anchor_persisted_evidence_records(
+    records: Sequence[Mapping[str, Any]],
+    session_factory: Callable[[], Any],
+) -> PersistedAnchoredEvidenceRecords:
+    """Persist building/proof state, submit, persist tx, then confirm and anchor.
+
+    This service owns each short DB transaction so the building and submitted
+    states are durable while chain submission and confirmation polling run. If
+    submission fails definitively, evidence is released for retry. Uncertain
+    broadcasts and submitted transactions retain their proofs for recovery.
+    """
+    from .persistence import (
+        confirm_submitted_batch,
+        create_building_batch,
+        mark_batch_submitted,
+        mark_submitted_batch_failed,
+    )
+
+    ordered, prepared = prepare_evidence_records(records)
+    batch_id = None
+    persisted = False
+    submission = None
+    try:
+        with session_factory() as session:
+            batch = create_building_batch(
+                session,
+                root_hash=prepared["root"],
+                records=ordered,
+                evidence_proofs=prepared["evidence_proofs"],
+            )
+            batch_id = batch.id
+            session.commit()
+            persisted = True
+
+        submission = submit_root(prepared["root"], prepared["leaf_count"])
+        with session_factory() as session:
+            mark_batch_submitted(
+                session,
+                batch_id=batch_id,
+                transaction_hash=submission["transaction_hash"],
+                chain_id=submission["chain_id"],
+            )
+            session.commit()
+
+        receipt = wait_for_anchor(
+            submission, prepared["root"], prepared["leaf_count"]
+        )
+        with session_factory() as session:
+            batch = confirm_submitted_batch(
+                session, batch_id=batch_id, anchor_receipt=receipt
+            )
+            session.commit()
+
+        return {
+            "batch_id": str(batch_id),
+            "chain_batch_id": int(receipt["chain_batch_id"]),
+            "root": prepared["root"],
+            "leaf_count": prepared["leaf_count"],
+            "transaction_hash": receipt["transaction_hash"],
+            "block_number": int(receipt["block_number"]),
+            "chain_id": int(receipt["chain_id"]),
+            "evidence_proofs": prepared["evidence_proofs"],
+        }
+    except Exception as exc:
+        if persisted and batch_id is not None and (
+            isinstance(exc, TransactionReverted)
+            or (submission is None and not isinstance(exc, SubmissionUnknown))
+        ):
+            try:
+                with session_factory() as session:
+                    mark_submitted_batch_failed(
+                        session,
+                        batch_id=batch_id,
+                        failure_code=(
+                            "transaction_reverted"
+                            if isinstance(exc, TransactionReverted)
+                            else "submission_failed"
+                        ),
+                    )
+                    session.commit()
+            except Exception as failure_error:
+                exc.add_note(
+                    "Could not persist failed/retryable batch state: "
+                    + str(failure_error)
+                )
+        elif persisted and submission is not None:
+            # Also recover a DB outage immediately after broadcast when possible.
+            try:
+                with session_factory() as session:
+                    mark_batch_submitted(session, batch_id=batch_id, **submission)
+                    session.commit()
+            except Exception:
+                exc.add_note("Batch retained for reconciliation; do not submit its evidence again.")
+        raise

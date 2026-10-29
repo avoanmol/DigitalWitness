@@ -1,0 +1,504 @@
+{
+  "dataset": "synthetic benchmark with optional separate private pilot",
+  "dataset_scope": "Synthetic benchmark scores use only hand-authored examples. Private pilot data, when supplied, is evaluated separately and does not change those scores.",
+  "real_world_accuracy_claim": false,
+  "development_sample_count": 60,
+  "development_by_language": {
+    "en": {
+      "samples": 20,
+      "entity": {
+        "tp": 20,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "threat": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 10,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "specificity": 1.0
+      }
+    },
+    "hi": {
+      "samples": 20,
+      "entity": {
+        "tp": 20,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "threat": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 10,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "specificity": 1.0
+      }
+    },
+    "kn": {
+      "samples": 20,
+      "entity": {
+        "tp": 20,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "threat": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 10,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "specificity": 1.0
+      }
+    }
+  },
+  "challenge": {
+    "name": "held-out synthetic challenge set",
+    "count": 28,
+    "labeling": "Hand-authored synthetic cases labeled by the project team; no independent annotator review.",
+    "overall": {
+      "tp": 6,
+      "fp": 6,
+      "fn": 14,
+      "tn": 2,
+      "precision": 0.5,
+      "recall": 0.3,
+      "f1": 0.375,
+      "specificity": 0.25
+    },
+    "by_scenario": {
+      "defamation_morphing": {
+        "samples": 4,
+        "tp": 0,
+        "fp": 0,
+        "fn": 4,
+        "tn": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "specificity": null
+      },
+      "extortion_blackmail": {
+        "samples": 4,
+        "tp": 3,
+        "fp": 0,
+        "fn": 1,
+        "tn": 0,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571,
+        "specificity": null
+      },
+      "fake_profile_impersonation": {
+        "samples": 4,
+        "tp": 2,
+        "fp": 0,
+        "fn": 2,
+        "tn": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6667,
+        "specificity": null
+      },
+      "harassment_stalking": {
+        "samples": 4,
+        "tp": 0,
+        "fp": 0,
+        "fn": 4,
+        "tn": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "specificity": null
+      },
+      "hard_negative": {
+        "samples": 8,
+        "tp": 0,
+        "fp": 6,
+        "fn": 0,
+        "tn": 2,
+        "precision": 0.0,
+        "recall": null,
+        "f1": 0.0,
+        "specificity": 0.25
+      },
+      "intimate_image_abuse": {
+        "samples": 4,
+        "tp": 1,
+        "fp": 0,
+        "fn": 3,
+        "tn": 0,
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4,
+        "specificity": null
+      }
+    },
+    "by_language": {
+      "en": {
+        "samples": 14,
+        "tp": 3,
+        "fp": 2,
+        "fn": 7,
+        "tn": 2,
+        "precision": 0.6,
+        "recall": 0.3,
+        "f1": 0.4,
+        "specificity": 0.5
+      },
+      "hi": {
+        "samples": 7,
+        "tp": 1,
+        "fp": 2,
+        "fn": 4,
+        "tn": 0,
+        "precision": 0.3333,
+        "recall": 0.2,
+        "f1": 0.25,
+        "specificity": 0.0
+      },
+      "kn": {
+        "samples": 7,
+        "tp": 2,
+        "fp": 2,
+        "fn": 3,
+        "tn": 0,
+        "precision": 0.5,
+        "recall": 0.4,
+        "f1": 0.4444,
+        "specificity": 0.0
+      }
+    },
+    "errors": [
+      {
+        "id": "holdout-01",
+        "language": "en",
+        "scenario": "harassment_stalking",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-02",
+        "language": "en",
+        "scenario": "harassment_stalking",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-03",
+        "language": "hi",
+        "scenario": "harassment_stalking",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-04",
+        "language": "kn",
+        "scenario": "harassment_stalking",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-05",
+        "language": "en",
+        "scenario": "extortion_blackmail",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-10",
+        "language": "en",
+        "scenario": "intimate_image_abuse",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-11",
+        "language": "hi",
+        "scenario": "intimate_image_abuse",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-12",
+        "language": "kn",
+        "scenario": "intimate_image_abuse",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-13",
+        "language": "en",
+        "scenario": "fake_profile_impersonation",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-15",
+        "language": "hi",
+        "scenario": "fake_profile_impersonation",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-17",
+        "language": "en",
+        "scenario": "defamation_morphing",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-18",
+        "language": "en",
+        "scenario": "defamation_morphing",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-19",
+        "language": "hi",
+        "scenario": "defamation_morphing",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-20",
+        "language": "kn",
+        "scenario": "defamation_morphing",
+        "expected_threat": true,
+        "predicted_threat": false
+      },
+      {
+        "id": "holdout-22",
+        "language": "en",
+        "scenario": "hard_negative",
+        "expected_threat": false,
+        "predicted_threat": true
+      },
+      {
+        "id": "holdout-23",
+        "language": "en",
+        "scenario": "hard_negative",
+        "expected_threat": false,
+        "predicted_threat": true
+      },
+      {
+        "id": "holdout-24",
+        "language": "hi",
+        "scenario": "hard_negative",
+        "expected_threat": false,
+        "predicted_threat": true
+      },
+      {
+        "id": "holdout-25",
+        "language": "hi",
+        "scenario": "hard_negative",
+        "expected_threat": false,
+        "predicted_threat": true
+      },
+      {
+        "id": "holdout-26",
+        "language": "kn",
+        "scenario": "hard_negative",
+        "expected_threat": false,
+        "predicted_threat": true
+      },
+      {
+        "id": "holdout-27",
+        "language": "kn",
+        "scenario": "hard_negative",
+        "expected_threat": false,
+        "predicted_threat": true
+      }
+    ]
+  },
+  "private_evaluation": {
+    "status": "evaluated",
+    "pilot_coverage": {
+      "core_scenarios_met": 0,
+      "core_scenarios_total": 5,
+      "target_met": false,
+      "by_scenario": {
+        "harassment_stalking": {
+          "positive_cases": 1,
+          "negative_cases": 0,
+          "target_per_class": 5,
+          "target_met": false
+        },
+        "extortion_blackmail": {
+          "positive_cases": 0,
+          "negative_cases": 0,
+          "target_per_class": 5,
+          "target_met": false
+        },
+        "intimate_image_abuse": {
+          "positive_cases": 0,
+          "negative_cases": 0,
+          "target_per_class": 5,
+          "target_met": false
+        },
+        "fake_profile_impersonation": {
+          "positive_cases": 0,
+          "negative_cases": 0,
+          "target_per_class": 5,
+          "target_met": false
+        },
+        "defamation_morphing": {
+          "positive_cases": 0,
+          "negative_cases": 0,
+          "target_per_class": 5,
+          "target_met": false
+        }
+      }
+    },
+    "case_count": 1,
+    "reviewer_labeled_cases": 0,
+    "reviewer_unanimous_cases": 0,
+    "reviewer_agreement": null,
+    "cases_without_individual_labels": 1,
+    "source_types": [
+      "consented_redacted"
+    ],
+    "reviewer_count_minimum": 2,
+    "overall": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "tn": 0,
+      "precision": null,
+      "recall": 0.0,
+      "f1": 0.0,
+      "specificity": null
+    },
+    "by_language": {
+      "en": {
+        "cases": 1,
+        "positive_labels": 1,
+        "negative_labels": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "tn": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "specificity": null
+      }
+    },
+    "by_scenario": {
+      "harassment_stalking": {
+        "cases": 1,
+        "positive_labels": 1,
+        "negative_labels": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "tn": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "specificity": null
+      }
+    },
+    "by_media_type": {
+      "text": {
+        "cases": 1,
+        "positive_labels": 1,
+        "negative_labels": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "tn": 0,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "specificity": null
+      }
+    },
+    "mean_ocr_cer": null,
+    "extraction_methods": {
+      "reviewed_transcript": 1
+    }
+  },
+  "ocr": {
+    "fixture_count": 4,
+    "evaluated_count": 4,
+    "skipped": [],
+    "formats": {
+      "png": 2,
+      "pdf": 2
+    },
+    "mean_cer": 0.0166,
+    "threat_matches": 4,
+    "threat_metrics": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "tn": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "specificity": 1.0
+    },
+    "results": [
+      {
+        "id": "ocr-threat-image",
+        "method": "tesseract_ocr:eng+hin+kan",
+        "cer": 0.02,
+        "expected_threat": true,
+        "detected_threat": true,
+        "threat_match": true,
+        "text_extracted": true
+      },
+      {
+        "id": "ocr-safe-quote",
+        "method": "tesseract_ocr:eng+hin+kan",
+        "cer": 0.017857142857142856,
+        "expected_threat": false,
+        "detected_threat": false,
+        "threat_match": true,
+        "text_extracted": true
+      },
+      {
+        "id": "ocr-handle-pdf",
+        "method": "tesseract_ocr:eng+hin+kan",
+        "cer": 0.0,
+        "expected_threat": false,
+        "detected_threat": false,
+        "threat_match": true,
+        "text_extracted": true
+      },
+      {
+        "id": "ocr-blackmail-pdf",
+        "method": "tesseract_ocr:eng+hin+kan",
+        "cer": 0.02857142857142857,
+        "expected_threat": true,
+        "detected_threat": true,
+        "threat_match": true,
+        "text_extracted": true
+      }
+    ]
+  },
+  "limitations": [
+    "Results measure these synthetic examples only and do not estimate real-world accuracy.",
+    "The challenge set is hand-authored and small; it is not representative of real cases.",
+    "The OCR benchmark has four generated fixtures and is too small for a deployment claim.",
+    "Automated flags are review leads and must not be used as findings or criminal predictions."
+  ]
+}

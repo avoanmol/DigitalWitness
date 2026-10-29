@@ -15,6 +15,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/
@@ -223,3 +225,46 @@ __marimo__/
 __pycache__/
 *.py[cod]
 node_modules
+
+# Generated local blockchain output
+/artifacts/
+/cache/
+/contracts/deployments/
+
+/ai_eval/private_cases.jsonl
+
+/ai_eval/private_assets/
+# Local private AI evaluation and blind reviewer files
+/ai_eval/private_sources.jsonl
+/ai_eval/reviewer_a.csv
+/ai_eval/reviewer_b.csv
+/ai_eval/adjudications.csv
+/ai_eval/private_cases.generated.jsonl
+/ai_eval/development_report.json
+
+# Local backups contain encrypted evidence and database contents.
+/backups/
+
+# Local-only demo credentials (never commit).
+/.demo-accounts.local.txt
+# Next.js build output
+.next/
+frontend/.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Node dependencies
+node_modules/
+
+# Temporary and generated project files
+/tmp/
+/output/
+
+# Additional environment files
+.env.*
+!.env.example
+
+# Local private keys
+*.pem
+*.key

@@ -1,19 +1,32 @@
-
 services:
+  chain:
+    profiles: ["local-chain"]
+    build:
+      context: .
+      dockerfile: Dockerfile.chain
+    ports:
+      - "127.0.0.1:8546:8545"
+    healthcheck:
+      test: ["CMD", "node", "scripts/chain-health.mjs"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
   db:
     image: postgres:16
     container_name: digitalwitness-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: dw
-      POSTGRES_USER: dw
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-dw}
+      POSTGRES_USER: ${POSTGRES_USER:-dw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup_local_env.py first}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dw -d dw"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dw} -d ${POSTGRES_DB:-dw}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -25,13 +38,139 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dwminio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dw_minio_local_password}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/setup_local_env.py first}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio_data:/data
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digitalwitness-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-dw}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dw}"
+      JWT_SECRET: ${JWT_SECRET:?Run scripts/setup_local_env.py first}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      CHAIN_RPC_URL: ${CHAIN_RPC_URL:?Set CHAIN_RPC_URL to Polygon Amoy in .env}
+      CHAIN_EXPECTED_ID: ${CHAIN_EXPECTED_ID:-80002}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env}
+      MINIO_BUCKET: ${MINIO_BUCKET:-evidence}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      EVIDENCE_ENC_KEY: ${EVIDENCE_ENC_KEY:?Run scripts/setup_local_env.py first}
+      RECEIPT_HMAC_KEY: ${RECEIPT_HMAC_KEY:?Run scripts/setup_local_env.py first}
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    command:
+      - sh
+      - -c
+      - python -m alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  integrity-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digitalwitness-integrity-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-dw}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dw}"
+      CHAIN_RPC_URL: ${CHAIN_RPC_URL:?Set CHAIN_RPC_URL to Polygon Amoy in .env}
+      CHAIN_EXPECTED_ID: ${CHAIN_EXPECTED_ID:-80002}
+      ANCHOR_BATCH_SIZE: ${ANCHOR_BATCH_SIZE:-10}
+      ANCHOR_INTERVAL_SECONDS: ${ANCHOR_INTERVAL_SECONDS:-30}
+      ANCHOR_WORKER_POLL_SECONDS: ${ANCHOR_WORKER_POLL_SECONDS:-5}
+      ANCHOR_BUILDING_TIMEOUT_SECONDS: ${ANCHOR_BUILDING_TIMEOUT_SECONDS:-300}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["python", "-m", "backend.worker"]
+
+  ai-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digitalwitness-ai-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-dw}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dw}"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env}
+      MINIO_BUCKET: ${MINIO_BUCKET:-evidence}
+      EVIDENCE_ENC_KEY: ${EVIDENCE_ENC_KEY:?Run scripts/setup_local_env.py first}
+      LLM_ENABLED: ${LLM_ENABLED:-false}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      AI_WORKER_POLL_SECONDS: ${AI_WORKER_POLL_SECONDS:-3}
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-eng+hin+kan}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-25}
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["python", "-m", "backend.app.ai.worker"]
+  ai-eval:
+    profiles: ["evaluation"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-eng+hin+kan}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-25}
+    volumes:
+      - ./ai_eval:/app/ai_eval
+    command: ["python", "-m", "ai_eval.run_eval"]
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://127.0.0.1:8000}
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-true}
+        NEXT_PUBLIC_MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+    container_name: digitalwitness-web
+    restart: unless-stopped
+    environment:
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
 volumes:
   postgres_data:
   minio_data:

@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -79,6 +80,18 @@ class Case(Base):
     incident_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    external_reference_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    external_reference_nonce: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    external_reference_channel: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    external_reference_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="open"
     )
@@ -95,6 +108,10 @@ class Case(Base):
         CheckConstraint(
             "status IN ('open', 'under_review', 'closed')",
             name="ck_cases_status",
+        ),
+        CheckConstraint(
+            "external_reference_channel IS NULL OR external_reference_channel IN ('cybercrime_portal', 'local_police')",
+            name="ck_cases_external_reference_channel",
         ),
     )
 
@@ -525,7 +542,6 @@ class ThreatFlag(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
     __table_args__ = (
         CheckConstraint(
             "severity IN ('low', 'medium', 'high', 'critical')",
@@ -575,6 +591,7 @@ class CaseLink(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    review_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         CheckConstraint(

@@ -1,0 +1,91 @@
+{
+  "measured_at": "2026-10-29T00:55:08.720724+00:00",
+  "network": "isolated Hardhat 31337",
+  "all_ten_guide_cases_passed": true,
+  "checks": [
+    {
+      "check": "9: uploaded evidence is pending, with an audited pending proof response",
+      "passed": true
+    },
+    {
+      "check": "8: clean batches of sizes 1, 2, 3, 7 and 10 verify through HTTP and storage",
+      "passed": true
+    },
+    {
+      "check": "1: flip one plaintext byte, re-encrypt, and detect alteration",
+      "passed": true
+    },
+    {
+      "check": "2: same-name same-size replacement is altered",
+      "passed": true
+    },
+    {
+      "check": "protected evidence hash rejects normal SQL updates",
+      "passed": true
+    },
+    {
+      "check": "3: changed file plus forged DB hash still fails its Merkle proof",
+      "passed": true
+    },
+    {
+      "check": "4: modified proof sibling is altered",
+      "passed": true
+    },
+    {
+      "check": "5: substituted existing on-chain batch ID is altered",
+      "passed": true
+    },
+    {
+      "check": "6: truncated and appended files are altered",
+      "passed": true
+    },
+    {
+      "check": "7: re-saving PDF metadata is altered",
+      "passed": true
+    },
+    {
+      "check": "missing objects and unreadable AES-GCM ciphertext return audited error",
+      "passed": true
+    },
+    {
+      "check": "reporter ownership, privileged roles, unauthenticated and cross-case access rules",
+      "passed": true
+    },
+    {
+      "check": "authenticated file access, signed receipt verification, and role-protected audit API",
+      "passed": true
+    },
+    {
+      "check": "admin user management protects the current/last administrator",
+      "passed": true
+    },
+    {
+      "check": "ten trigger-to-confirmation measurements below 60 seconds on local Hardhat",
+      "passed": true
+    },
+    {
+      "check": "audit chain remains valid after all verification and proof reads",
+      "passed": true
+    },
+    {
+      "check": "10: stopped chain returns error and persists an audited verification",
+      "passed": true
+    }
+  ],
+  "outage_evidence_id": "b3dc35b4-ddfc-4a8a-b626-fe6f78c06ae2",
+  "timings_seconds": [
+    0.08344599799602292,
+    0.06529525500081945,
+    0.07815968800423434,
+    0.09109406400239095,
+    0.08906169699912425,
+    0.08974780599965015,
+    0.07239490099891555,
+    0.07351917299820343,
+    0.08231441399402684,
+    0.07540473300468875
+  ],
+  "median_seconds": 0.08023705099913059,
+  "max_seconds": 0.09109406400239095,
+  "scope": "HTTP + PostgreSQL + encrypted object storage + actual chain; synthetic fixtures only"
+}

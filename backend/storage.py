@@ -62,6 +62,19 @@ def store_encrypted_evidence(
         ContentType="application/octet-stream",
     )
 
+
+def store_encrypted_evidence_fileobj(storage_key: str, encrypted_file) -> None:
+    """Upload a seekable encrypted file using S3 multipart support when needed."""
+    client = get_s3_client()
+    bucket = ensure_bucket_exists()
+    encrypted_file.seek(0)
+    client.upload_fileobj(
+        encrypted_file,
+        bucket,
+        storage_key,
+        ExtraArgs={"ContentType": "application/octet-stream"},
+    )
+
 def get_encrypted_evidence(storage_key: str) -> bytes:
     """Retrieve encrypted evidence bytes from object storage."""
     client = get_s3_client()
@@ -72,7 +85,11 @@ def get_encrypted_evidence(storage_key: str) -> bytes:
         Key=storage_key,
     )
 
-    return response["Body"].read()
+    body = response["Body"]
+    try:
+        return body.read()
+    finally:
+        body.close()
 
 
 def delete_encrypted_evidence(storage_key: str) -> None:

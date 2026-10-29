@@ -7,10 +7,12 @@ export default defineConfig({
     profiles: {
       default: {
         version: "0.8.34",
+        settings: { evmVersion: "paris" },
       },
       production: {
         version: "0.8.34",
         settings: {
+          evmVersion: "paris",
           optimizer: {
             enabled: true,
             runs: 200,

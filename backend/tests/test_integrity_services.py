@@ -10,11 +10,13 @@ from app.integrity.batcher import (
     DEFAULT_ANCHOR_BATCH_SIZE,
     DEFAULT_ANCHOR_INTERVAL_SECONDS,
     anchor_evidence_records,
+    anchor_persisted_evidence_records,
     retry_delay_after_failure,
     should_trigger_batch,
 )
 from app.integrity.chain import ChainError
 from app.integrity.merkle import build_levels, get_proof, leaf_hash
+from app.integrity.service import inspect_stored_evidence
 from app.integrity.verify import verify_integrity
 
 
@@ -225,6 +227,218 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(result["result"], "verified")
         self.assertEqual(result["computed_root"], self.root)
         self.assertEqual(result["onchain_root"], self.root)
+
+    def test_anchor_on_another_chain_is_error_not_altered(self):
+        from types import SimpleNamespace
+
+        evidence = SimpleNamespace(
+            sha256="1" * 64,
+            storage_key="private/object-key",
+            status="anchored",
+        )
+        proof = SimpleNamespace(proof=[], leaf_hash="0" * 64, leaf_index=0)
+        batch = SimpleNamespace(
+            status="confirmed",
+            chain_batch_id=1,
+            tx_hash="0x" + "ab" * 32,
+            block_number=10,
+            chain_id=31337,
+            root_hash="0x" + "cd" * 32,
+            leaf_count=1,
+        )
+        with patch("app.integrity.service.get_chain_id", return_value=80002), patch(
+            "app.integrity.service.get_encrypted_evidence"
+        ) as storage_read:
+            result = inspect_stored_evidence(evidence, proof, batch)
+
+        self.assertEqual(result["result"], "error")
+        self.assertIn("recorded on chain 31337", result["reason"])
+        self.assertNotEqual(result["result"], "altered")
+        storage_read.assert_not_called()
+
+
+class PersistedBatchServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.batch_id = "batch-1"
+        self.records = [
+            {
+                "id": "evidence-1",
+                "uploaded_at": datetime(2026, 10, 20, tzinfo=timezone.utc),
+                "status": "stored",
+                "sha256": format(1, "064x"),
+            },
+            {
+                "id": "evidence-2",
+                "uploaded_at": datetime(2026, 10, 20, 0, 0, 1, tzinfo=timezone.utc),
+                "status": "stored",
+                "sha256": format(2, "064x"),
+            },
+        ]
+        self.states = {"batch": None, "evidence": ["stored", "stored"]}
+        self.events = []
+
+    class Session:
+        def __init__(self, events):
+            self.events = events
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def commit(self):
+            self.events.append("commit")
+
+    def factory(self):
+        return self.Session(self.events)
+
+    def test_success_persists_each_state_in_order(self):
+        from types import SimpleNamespace
+
+        def create_building(session, **kwargs):
+            self.assertEqual(self.states["batch"], None)
+            self.assertEqual(len(kwargs["evidence_proofs"]), 2)
+            self.states["batch"] = "building"
+            self.events.append("building")
+            return SimpleNamespace(id=self.batch_id)
+
+        def mark_submitted(session, **kwargs):
+            self.assertEqual(self.states["batch"], "building")
+            self.states["batch"] = "submitted"
+            self.events.append("submitted")
+
+        def confirm(session, **kwargs):
+            self.assertEqual(self.states["batch"], "submitted")
+            self.states["batch"] = "confirmed"
+            self.states["evidence"] = ["anchored", "anchored"]
+            self.events.append("confirmed")
+            return SimpleNamespace(id=self.batch_id)
+
+        submission = {
+            "transaction_hash": "0x" + "ab" * 32,
+            "chain_id": 31337,
+        }
+        receipt = {
+            **submission,
+            "chain_batch_id": 5,
+            "block_number": 12,
+        }
+        def submit(root, leaf_count):
+            self.events.append("chain_submit")
+            return submission
+
+        def wait(submitted, root, leaf_count):
+            self.events.append("confirmation_wait")
+            return receipt
+
+        with patch(
+            "app.integrity.persistence.create_building_batch",
+            side_effect=create_building,
+        ), patch(
+            "app.integrity.persistence.mark_batch_submitted",
+            side_effect=mark_submitted,
+        ) as submitted, patch(
+            "app.integrity.persistence.confirm_submitted_batch",
+            side_effect=confirm,
+        ), patch(
+            "app.integrity.persistence.mark_submitted_batch_failed"
+        ) as failed, patch(
+            "app.integrity.batcher.submit_root", side_effect=submit
+        ) as submit_call, patch(
+            "app.integrity.batcher.wait_for_anchor", side_effect=wait
+        ) as wait_call:
+            result = anchor_persisted_evidence_records(self.records, self.factory)
+
+        self.assertEqual(self.states["batch"], "confirmed")
+        self.assertEqual(self.states["evidence"], ["anchored", "anchored"])
+        self.assertEqual(result["batch_id"], self.batch_id)
+        self.assertLess(self.events.index("building"), self.events.index("chain_submit"))
+        self.assertLess(self.events.index("chain_submit"), self.events.index("submitted"))
+        self.assertLess(self.events.index("submitted"), self.events.index("confirmation_wait"))
+        self.assertLess(self.events.index("confirmation_wait"), self.events.index("confirmed"))
+        submitted.assert_called_once()
+        submit_call.assert_called_once_with(result["root"], result["leaf_count"])
+        wait_call.assert_called_once_with(submission, result["root"], result["leaf_count"])
+        failed.assert_not_called()
+
+    def test_chain_failure_marks_failed_and_keeps_evidence_retryable(self):
+        from types import SimpleNamespace
+
+        def create_building(session, **kwargs):
+            self.states["batch"] = "building"
+            self.events.append("building")
+            return SimpleNamespace(id=self.batch_id)
+
+        def mark_failed(session, **kwargs):
+            self.assertIn(self.states["batch"], {"building", "submitted"})
+            self.states["batch"] = "failed"
+            self.events.append("failed")
+
+        with patch(
+            "app.integrity.persistence.create_building_batch",
+            side_effect=create_building,
+        ), patch(
+            "app.integrity.persistence.mark_submitted_batch_failed",
+            side_effect=mark_failed,
+        ) as failed, patch(
+            "app.integrity.batcher.submit_root",
+            side_effect=ChainError("rpc offline"),
+        ), patch(
+            "app.integrity.batcher.wait_for_anchor"
+        ) as wait:
+            with self.assertRaisesRegex(ChainError, "offline"):
+                anchor_persisted_evidence_records(self.records, self.factory)
+
+        self.assertEqual(self.states["batch"], "failed")
+        self.assertEqual(self.states["evidence"], ["stored", "stored"])
+        self.assertNotIn("altered", self.states["evidence"])
+        self.assertEqual(self.events[-2:], ["failed", "commit"])
+        self.assertEqual(failed.call_args.kwargs["failure_code"], "submission_failed")
+        wait.assert_not_called()
+
+    def test_confirmation_timeout_retains_submitted_batch_and_proofs(self):
+        from types import SimpleNamespace
+
+        def create_building(session, **kwargs):
+            self.states["batch"] = "building"
+            return SimpleNamespace(id=self.batch_id)
+
+        def mark_submitted(session, **kwargs):
+            self.states["batch"] = "submitted"
+
+        def mark_failed(session, **kwargs):
+            self.states["batch"] = "failed"
+
+        with patch(
+            "app.integrity.persistence.create_building_batch",
+            side_effect=create_building,
+        ), patch(
+            "app.integrity.persistence.mark_batch_submitted",
+            side_effect=mark_submitted,
+        ), patch(
+            "app.integrity.persistence.mark_submitted_batch_failed",
+            side_effect=mark_failed,
+        ), patch(
+            "app.integrity.batcher.submit_root",
+            return_value={"transaction_hash": "0x" + "ab" * 32, "chain_id": 31337},
+        ), patch(
+            "app.integrity.batcher.wait_for_anchor",
+            side_effect=ChainError("receipt timeout"),
+        ):
+            with self.assertRaisesRegex(ChainError, "timeout"):
+                anchor_persisted_evidence_records(self.records, self.factory)
+
+        self.assertEqual(self.states["batch"], "submitted")
+        self.assertEqual(self.states["evidence"], ["stored", "stored"])
+        self.assertNotIn("altered", self.states["evidence"])
+
+    def test_non_stored_evidence_never_starts_a_batch(self):
+        invalid = [dict(self.records[0], status="failed")]
+        with patch("app.integrity.batcher.submit_root") as submit:
+            with self.assertRaisesRegex(ValueError, "status 'stored'"):
+                anchor_persisted_evidence_records(invalid, self.factory)
+        submit.assert_not_called()
 
 
 if __name__ == "__main__":

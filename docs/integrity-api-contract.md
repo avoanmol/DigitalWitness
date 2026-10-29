@@ -1,82 +1,50 @@
-# Integrity API contract proposal
+# Integrity and API contract
 
-This is A's proposal for the shared API contract. B owns the FastAPI router,
-authentication, authorization, audit logging, and the canonical
-docs/api-contract.md. Coordinate these proposed shapes with the shared API owner before implementation.
+The API uses the shared FastAPI authentication, case-access policy, append-only audit log, and Alembic schema. Reporters can access their own cases; investigators, legal reviewers, and admins can access case evidence. Only legal and admin roles can read the audit trail. Only admins can manage user accounts.
 
-All timestamps are UTC ISO 8601 strings ending in Z. Hashes are 64 lowercase
-hexadecimal characters without 0x. Roots and transaction hashes are
-0x-prefixed lowercase hex. The API batch_id is the database UUID; chain_batch_id
-is the uint256 identifier emitted by the contract.
+Timestamps are UTC ISO 8601 strings. Hashes are 64 lowercase hexadecimal characters. Merkle roots and transaction hashes are 0x-prefixed. The API batch ID is a database UUID; the chain batch ID is the contract uint256 represented as a decimal string.
+
+## Upload and receipts
+
+POST /evidence/upload accepts one multipart file, a case_id query parameter, and optional investigation_categories. Allowed types are JPG, PNG, WEBP, PDF, TXT, JSON, MP3, WAV, M4A, MP4, MOV, and WEBM. Maximum size defaults to 100 MB.
+
+The server validates the content signature where the format has one, computes SHA-256 from the exact uploaded bytes, encrypts the original with AES-256-GCM, stores it in the private Silo bucket, and returns receipt fields plus a canonical HMAC-SHA-256 signature. Audio is stored without default transcription. Video sampling is limited to four frames from clips no longer than 60 seconds.
+
+GET /evidence/{evidence_id}/file returns the authenticated original bytes and records the access in the audit log. GET /evidence/{evidence_id}/receipt returns the signed upload snapshot and signature_valid. Both responses are private and non-cacheable.
 
 ## POST /evidence/{evidence_id}/verify
 
-Allowed roles: reporter for own evidence; investigator, legal, and admin.
+Allowed roles: reporter for their own evidence; investigator, legal, and admin.
 
-Return HTTP 200 with one of the guide's exact result values:
+The result is one of verified, altered, pending, or error:
 
-- verified: Unchanged since anchoring on [date and time]. This does not prove the file was genuine before upload.
-- altered: This file no longer matches what was recorded and anchored. Do not rely on it.
-- pending: Not anchored yet. The file is stored and hashed; anchoring is queued.
-- error: Verification could not be completed (reason shown). Try again; this is not a finding about the file.
+- verified means the current stored bytes match the uploaded fingerprint and confirmed chain proof.
+- altered means the bytes or saved Merkle proof do not match the anchored record.
+- pending means the record has not been anchored or confirmed.
+- error means required storage or chain services were unavailable. It is not an alteration result.
 
-Response fields:
+The response contains evidence_id, result, message, expected_hash, recomputed_hash, onchain_root, computed_root, tx_hash, batch_id, chain_batch_id, and checked_at. Attempts are stored and audited. RPC or storage failures return error, never altered.
 
-    {
-      "evidence_id": "uuid",
-      "result": "verified | altered | pending | error",
-      "message": "human-readable status",
-      "expected_hash": "64 lowercase hex or null",
-      "recomputed_hash": "64 lowercase hex or null",
-      "onchain_root": "0x... or null",
-      "computed_root": "0x... or null",
-      "tx_hash": "0x... or null",
-      "batch_id": "database uuid or null",
-      "checked_at": "UTC ISO 8601 timestamp"
-    }
+Case and evidence summaries also use `not_checked` when an anchor is confirmed but a stored-file integrity check has not completed since anchoring. This is a display state, not a persisted verification result. A previously saved `pending` check becomes `not_checked` in these summaries after its batch confirms.
 
-A verification attempt is stored and appended to B's audit log. RPC or storage
-failures produce error, never altered.
+## Proof and batch reads
 
-## GET /evidence/{evidence_id}/proof
+GET /evidence/{evidence_id}/proof returns the saved Merkle proof after case authorization and audits the read. A record without a confirmed proof is pending; it is never called altered for that reason.
 
-Allowed roles: same as verify. Viewing the proof is audited.
+GET /batches/{batch_id} is investigator/legal/admin only and returns the database UUID, chain batch ID, root, leaf count, transaction hash, chain ID, block number, status, and timestamps.
 
-    {
-      "evidence_id": "uuid",
-      "batch_id": "database uuid",
-      "leaf_index": 3,
-      "leaf_hash": "64 lowercase hex",
-      "proof": [
-        {"hash": "64 lowercase hex", "side": "left"},
-        {"hash": "64 lowercase hex", "side": "right"}
-      ],
-      "root": "0x...",
-      "tx_hash": "0x...",
-      "chain_id": 80002,
-      "explorer_url": "network-specific transaction URL"
-    }
+## Audit and admin routes
 
-When no proof exists, return the pending representation agreed in B's canonical
-API contract; never report this as altered.
+GET /audit is limited to legal/admin and supports case_id, limit (1–500, default 200), and offset.
 
-## GET /batches/{batch_id}
+GET /audit/verify checks the full hash chain and appends an audit record for the check. New audit hashes cover sequence, timestamp, and event fields. Existing entries written with the earlier hash format remain verifiable for local-history compatibility.
 
-Allowed roles: investigator, legal, and admin.
+GET /admin/users and PATCH /admin/users/{user_id} are admin-only. The API prevents an admin from disabling or demoting their own account and prevents removing the last active administrator. All role and activation changes are audited.
 
-    {
-      "id": "database uuid",
-      "chain_batch_id": "uint256 encoded as a decimal string",
-      "root_hash": "0x...",
-      "leaf_count": 10,
-      "tx_hash": "0x...",
-      "chain_id": 80002,
-      "block_number": 123456,
-      "status": "building | submitted | confirmed | failed",
-      "created_at": "UTC ISO 8601 timestamp",
-      "anchored_at": "UTC ISO 8601 timestamp or null"
-    }
+## Error response
 
-Errors use the shared shape:
-{"error": {"code": "string", "message": "human text", "details": {}}}.
+HTTP and request-validation errors use:
 
+    {"error":{"code":"string","message":"human text","details":{}}}
+
+Validation details omit submitted values. This avoids echoing passwords and evidence data. The frontend also understands legacy FastAPI detail responses.

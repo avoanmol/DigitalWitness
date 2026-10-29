@@ -1,186 +1,49 @@
-import json
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
+from collections import defaultdict
+from uuid import UUID
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
+from backend.app.ai.normalise import is_common_url
+from backend.models import Case, CaseLink, Entity
 
-
-COMMON_ENTITIES_PATH = (
-    Path(__file__).parent / "common_entities.json"
-)
-
-
-BASE_CONFIDENCE = {
-    "phone": 0.90,
-    "email": 0.90,
-    "handle": 0.70,
-    "url": 0.60,
-}
-
-
-def load_common_entities() -> dict[str, set[str]]:
-    """Load generic entities that should not create case links."""
-    if not COMMON_ENTITIES_PATH.exists():
-        return {}
-
-    with COMMON_ENTITIES_PATH.open(
-        "r",
-        encoding="utf-8",
-    ) as file:
-        data = json.load(file)
-
-    return {
-        entity_type: set(values)
-        for entity_type, values in data.items()
-    }
-
-
-def is_common_entity(
-    entity_type: str,
-    normalised_value: str,
-) -> bool:
-    """Return True when an entity is on the generic allowlist."""
-    common_entities = load_common_entities()
-
-    return normalised_value in common_entities.get(
-        entity_type,
-        set(),
-    )
-
-
-def calculate_link_confidence(
-    shared_entity_types: list[str],
-) -> float:
-    """
-    Calculate link confidence.
-
-    Base confidence comes from the strongest shared entity.
-    Each additional shared entity adds 0.05.
-    Maximum confidence is 0.99.
-    """
-    if not shared_entity_types:
-        return 0.0
-
-    base = max(
-        BASE_CONFIDENCE.get(entity_type, 0.0)
-        for entity_type in shared_entity_types
-    )
-
-    extra_entities = max(
-        0,
-        len(shared_entity_types) - 1,
-    )
-
-    confidence = base + (0.05 * extra_entities)
-
-    return round(
-        min(confidence, 0.99),
-        2,
-    )
-
-def order_case_pair(
-    case_a_id: str,
-    case_b_id: str,
-) -> tuple[str, str]:
-    """Store case pairs in deterministic order."""
-    if case_a_id < case_b_id:
-        return case_a_id, case_b_id
-
-    return case_b_id, case_a_id
-
-
-def find_shared_entities(
-    current_case_id: str,
-    current_entities: list[dict[str, Any]],
-    other_cases: list[dict[str, Any]],
-    rejected_links: set[tuple[str, str]] | None = None,
-) -> list[dict[str, Any]]:
-    """
-    Find suggested links between the current case and other cases.
-
-    Each entity must contain:
-        type
-        normalised_value
-
-    Each other case must contain:
-        case_id
-        entities
-    """
-    rejected_links = rejected_links or set()
-
-    suggestions: list[dict[str, Any]] = []
-
-    current_by_key: dict[
-        tuple[str, str],
-        dict[str, Any],
-    ] = {}
-
-    for entity in current_entities:
-        entity_type = entity["type"]
-        normalised_value = entity["normalised_value"]
-
-        if is_common_entity(
-            entity_type,
-            normalised_value,
-        ):
+def suggest_links_for_case(db: Session, case_id: UUID) -> int:
+    current = db.scalars(select(Entity).where(Entity.case_id == case_id)).all()
+    matchable = [item for item in current if not (item.type == "url" and is_common_url(item.raw_value))]
+    if not matchable or db.get(Case, case_id) is None:
+        return 0
+    values = {(item.type, item.normalised_value) for item in matchable}
+    candidates = db.scalars(select(Entity).where(Entity.case_id != case_id, Entity.type.in_({v[0] for v in values}), Entity.normalised_value.in_({v[1] for v in values}))).all()
+    by_key: dict[tuple[str, str], list[Entity]] = defaultdict(list)
+    for item in matchable + candidates:
+        if item.type == "url" and is_common_url(item.raw_value):
             continue
-
-        current_by_key[
-            (entity_type, normalised_value)
-        ] = entity
-
-    for other_case in other_cases:
-        other_case_id = str(other_case["case_id"])
-
-        if other_case_id == current_case_id:
+        by_key[(item.type, item.normalised_value)].append(item)
+    grouped: dict[tuple[UUID, UUID], dict[tuple[str, str], Entity]] = defaultdict(dict)
+    for key, entities in by_key.items():
+        lefts = [item for item in entities if item.case_id == case_id]
+        rights = [item for item in entities if item.case_id != case_id]
+        for left in lefts:
+            for right in rights:
+                pair = tuple(sorted((left.case_id, right.case_id), key=lambda item: item.int))
+                grouped[pair][key] = left
+    if not grouped:
+        return 0
+    existing = db.scalars(select(CaseLink).where(or_(CaseLink.case_a_id == case_id, CaseLink.case_b_id == case_id))).all()
+    existing_by_pair = {(item.case_a_id, item.case_b_id): item for item in existing}
+    created = 0
+    weights = {"email": .88, "phone": .82, "handle": .72, "url": .70}
+    for pair, shared in grouped.items():
+        link = existing_by_pair.get(pair)
+        if link is not None and link.status != "suggested":
             continue
-
-        case_a_id, case_b_id = order_case_pair(
-            current_case_id,
-            other_case_id,
-        )
-
-        if (case_a_id, case_b_id) in rejected_links:
-            continue
-
-        shared_entities: list[dict[str, Any]] = []
-
-        for entity in other_case.get("entities", []):
-            key = (
-                entity["type"],
-                entity["normalised_value"],
-            )
-
-            if key not in current_by_key:
-                continue
-
-            shared_entities.append(
-                {
-                    "type": entity["type"],
-                    "normalised_value": entity[
-                        "normalised_value"
-                    ],
-                }
-            )
-
-        if not shared_entities:
-            continue
-
-        entity_types = [
-            entity["type"]
-            for entity in shared_entities
-        ]
-
-        confidence = calculate_link_confidence(
-            entity_types
-        )
-
-        suggestions.append(
-            {
-                "case_a_id": case_a_id,
-                "case_b_id": case_b_id,
-                "confidence": confidence,
-                "shared_entities": shared_entities,
-                "status": "suggested",
-            }
-        )
-
-    return suggestions
+        shared_rows, remaining = [], 1.0
+        for (entity_type, normalized), entity in shared.items():
+            remaining *= 1.0 - weights.get(entity_type, .65)
+            shared_rows.append({"id": f"{entity_type}:{normalized}", "type": entity_type, "raw": entity.raw_value, "normalised": normalized, "confidence": entity.confidence})
+        score = min(.98, 1.0 - remaining)
+        if link is None:
+            db.add(CaseLink(case_a_id=pair[0], case_b_id=pair[1], shared_entities=shared_rows, confidence=score, status="suggested", created_by="ai:entity-match-v1"))
+            created += 1
+        else:
+            link.shared_entities, link.confidence = shared_rows, score
+    return created

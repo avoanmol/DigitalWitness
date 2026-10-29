@@ -13,10 +13,19 @@ BATCH_COUNT_SELECTOR = "0x06f13056"
 ROOT_ANCHORED_TOPIC = (
     "0x87a28429f4bbd1ba3d51cb9e71f50aa444b326bf263911d58f7b0709df673909"
 )
+DEFAULT_EXPECTED_CHAIN_ID = 80002
 
 
 class ChainError(RuntimeError):
     """Raised when a blockchain RPC operation fails."""
+
+
+class SubmissionUnknown(ChainError):
+    """A broadcast may have reached the node; do not release its evidence."""
+
+
+class TransactionReverted(ChainError):
+    """A canonical, sufficiently confirmed receipt proves submission failed."""
 
 
 class AnchorReceipt(TypedDict):
@@ -24,6 +33,26 @@ class AnchorReceipt(TypedDict):
     chain_batch_id: int
     block_number: int
     chain_id: int
+
+
+class RootSubmission(TypedDict):
+    transaction_hash: str
+    chain_id: int
+
+
+def _assert_expected_chain_id(chain_id: int) -> None:
+    """Refuse writes and reads against an unexpected chain (Amoy by default)."""
+    raw_expected = os.environ.get("CHAIN_EXPECTED_ID", str(DEFAULT_EXPECTED_CHAIN_ID))
+    try:
+        expected = int(raw_expected)
+    except ValueError as exc:
+        raise ChainError("CHAIN_EXPECTED_ID must be a positive integer") from exc
+    if expected < 1:
+        raise ChainError("CHAIN_EXPECTED_ID must be a positive integer")
+    if chain_id != expected:
+        raise ChainError(
+            f"Configured RPC chain ID {chain_id} does not match CHAIN_EXPECTED_ID {expected}"
+        )
 
 
 def _connection() -> tuple[str, str]:
@@ -59,7 +88,7 @@ def _rpc(method: str, params: list[Any]) -> Any:
     request = Request(
         rpc_url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "User-Agent": "DigitalWitness/1.0"},
         method="POST",
     )
 
@@ -67,10 +96,11 @@ def _rpc(method: str, params: list[Any]) -> Any:
         with urlopen(request, timeout=10) as response:
             payload = json.load(response)
     except Exception:
-        raise ChainError(f"RPC transport failed during {method}") from None
+        error = SubmissionUnknown if method in {"eth_sendTransaction", "eth_sendRawTransaction"} else ChainError
+        raise error(f"RPC transport failed during {method}") from None
 
     if "error" in payload:
-        raise ChainError(f"RPC request {method} failed: {payload['error']}")
+        raise ChainError(f"RPC request {method} was rejected by the node")
     if "result" not in payload:
         raise ChainError(f"RPC response for {method} did not include a result")
     return payload["result"]
@@ -81,6 +111,7 @@ def _send_transaction(contract: str, calldata: str) -> str:
     if private_key:
         try:
             from web3 import Web3
+            from web3.middleware import ExtraDataToPOAMiddleware
         except Exception:
             raise ChainError(
                 "Testnet signing needs web3.py in a runtime that permits its native modules"
@@ -88,6 +119,7 @@ def _send_transaction(contract: str, calldata: str) -> str:
 
         rpc_url, _ = _connection()
         web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 10}))
+        web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         if not web3.is_connected():
             raise ChainError("Could not connect to the configured chain RPC")
 
@@ -96,7 +128,7 @@ def _send_transaction(contract: str, calldata: str) -> str:
             "from": account.address,
             "to": Web3.to_checksum_address(contract),
             "data": calldata,
-            "nonce": web3.eth.get_transaction_count(account.address),
+            "nonce": web3.eth.get_transaction_count(account.address, "pending"),
             "chainId": web3.eth.chain_id,
         }
         transaction["gas"] = web3.eth.estimate_gas(transaction)
@@ -111,17 +143,29 @@ def _send_transaction(contract: str, calldata: str) -> str:
             transaction["gasPrice"] = web3.eth.gas_price
 
         signed = account.sign_transaction(transaction)
-        return web3.eth.send_raw_transaction(signed.raw_transaction).hex()
+        try:
+            return Web3.to_hex(web3.eth.send_raw_transaction(signed.raw_transaction))
+        except Exception:
+            # The signed hash is known even if the provider loses the response.
+            # Return it so the durable submitted batch can be reconciled later.
+            return Web3.to_hex(signed.hash)
 
     sender = _sender()
-    return _rpc(
-        "eth_sendTransaction",
-        [{"from": sender, "to": contract, "data": calldata}],
-    )
+    try:
+        return _rpc(
+            "eth_sendTransaction",
+            [{"from": sender, "to": contract, "data": calldata}],
+        )
+    except ChainError:
+        # Provider errors can arrive after the node accepted a broadcast.
+        raise SubmissionUnknown("Anchor submission outcome is unknown; batch retained for reconciliation") from None
 
 
 def _anchor_event(receipt: dict[str, Any], root: str, leaf_count: int) -> int:
+    _, contract = _connection()
     for log in receipt.get("logs", []):
+        if log.get("address", "").lower() != contract:
+            continue
         topics = log.get("topics", [])
         if not topics or topics[0].lower() != ROOT_ANCHORED_TOPIC:
             continue
@@ -157,33 +201,58 @@ def _wait_for_receipt(
     if confirmations < 1:
         raise ChainError("CHAIN_CONFIRMATIONS must be at least 1")
 
-    deadline = time.monotonic() + 60
+    try:
+        timeout = float(os.environ.get("CHAIN_RECEIPT_TIMEOUT_SECONDS", "60"))
+    except ValueError as exc:
+        raise ChainError("CHAIN_RECEIPT_TIMEOUT_SECONDS must be numeric") from exc
+    if timeout <= 0:
+        raise ChainError("CHAIN_RECEIPT_TIMEOUT_SECONDS must be positive")
+    if get_chain_id() != chain_id:
+        raise ChainError("Configured RPC chain differs from the submitted chain")
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         receipt = _rpc("eth_getTransactionReceipt", [transaction_hash])
-        if receipt is None:
-            time.sleep(0.25)
-            continue
+        if receipt is not None:
+            block_number = int(receipt["blockNumber"], 16)
+            head = int(_rpc("eth_blockNumber", []), 16)
+            if head >= block_number + confirmations - 1:
+                block = _rpc("eth_getBlockByNumber", [receipt["blockNumber"], False])
+                latest_receipt = _rpc("eth_getTransactionReceipt", [transaction_hash])
+                if (block and latest_receipt and receipt.get("blockHash")
+                        and block.get("hash") == receipt["blockHash"]
+                        and latest_receipt.get("blockHash") == receipt["blockHash"]):
+                    if int(latest_receipt["status"], 16) != 1:
+                        raise TransactionReverted("Anchor transaction reverted")
+                    return {
+                        "transaction_hash": transaction_hash,
+                        "chain_batch_id": _anchor_event(latest_receipt, root, leaf_count),
+                        "block_number": block_number,
+                        "chain_id": chain_id,
+                    }
+        time.sleep(0.25)
+    raise ChainError("Anchor is awaiting confirmations; the submitted batch is retained")
 
-        if int(receipt["status"], 16) != 1:
-            raise ChainError(f"Anchor transaction reverted: {transaction_hash}")
 
-        chain_batch_id = _anchor_event(receipt, root, leaf_count)
-        block_number = int(receipt["blockNumber"], 16)
+def get_chain_id() -> int:
+    chain_id = int(_rpc("eth_chainId", []), 16)
+    _assert_expected_chain_id(chain_id)
+    return chain_id
 
-        while time.monotonic() < deadline:
-            latest_block = int(_rpc("eth_blockNumber", []), 16)
-            if latest_block >= block_number + confirmations - 1:
-                return {
-                    "transaction_hash": transaction_hash,
-                    "chain_batch_id": chain_batch_id,
-                    "block_number": block_number,
-                    "chain_id": chain_id,
-                }
-            time.sleep(0.25)
 
-        break
-
-    raise ChainError(f"Timed out waiting for anchor confirmations: {transaction_hash}")
+def check_anchor_context(transaction_hash: str, root: str, leaf_count: int,
+                         chain_id: int, block_number: int) -> int:
+    """Check the recorded transaction still exists on the configured chain."""
+    if get_chain_id() != chain_id:
+        raise ChainError("Configured chain differs from the recorded chain")
+    receipt = _rpc("eth_getTransactionReceipt", [transaction_hash])
+    if not receipt or int(receipt.get("status", "0x0"), 16) != 1:
+        raise ChainError("The recorded anchor transaction is unavailable")
+    if int(receipt["blockNumber"], 16) != block_number:
+        raise ChainError("The recorded anchor block has changed")
+    block = _rpc("eth_getBlockByNumber", [receipt["blockNumber"], False])
+    if not block or block.get("hash") != receipt.get("blockHash"):
+        raise ChainError("The recorded anchor is no longer canonical")
+    return _anchor_event(receipt, root, leaf_count)
 
 
 def get_batch_count() -> int:
@@ -218,7 +287,7 @@ def get_batch(chain_batch_id: int) -> dict[str, int | str]:
     }
 
 
-def anchor_root(root: str, leaf_count: int) -> AnchorReceipt:
+def _validate_anchor_input(root: str, leaf_count: int) -> tuple[str, str]:
     if not isinstance(root, str) or len(root) != 66 or not root.startswith("0x"):
         raise ValueError("root must be a 0x-prefixed 32-byte hex value")
     try:
@@ -236,16 +305,56 @@ def anchor_root(root: str, leaf_count: int) -> AnchorReceipt:
 
     _, contract = _connection()
     normalized_root = "0x" + root_bytes.hex()
-    calldata = (
-        ANCHOR_ROOT_SELECTOR
-        + root_bytes.hex()
-        + format(leaf_count, "064x")
-    )
+    calldata = ANCHOR_ROOT_SELECTOR + root_bytes.hex() + format(leaf_count, "064x")
+    return contract, normalized_root + calldata
+
+
+def submit_root(root: str, leaf_count: int) -> RootSubmission:
+    """Broadcast a root and return as soon as its transaction hash is known."""
+    contract, payload = _validate_anchor_input(root, leaf_count)
+    normalized_root = payload[:66]
+    calldata = payload[66:]
+    # Read the network ID before broadcasting; once a tx is sent, its hash must
+    # be returned to the caller so it can be committed before receipt polling.
+    chain_id = get_chain_id()
     transaction_hash = _send_transaction(contract, calldata)
-    chain_id = int(_rpc("eth_chainId", []), 16)
+    if not isinstance(transaction_hash, str) or len(transaction_hash) != 66:
+        raise SubmissionUnknown("RPC returned an invalid anchor transaction hash")
+    try:
+        bytes.fromhex(transaction_hash[2:] if transaction_hash.startswith("0x") else "")
+    except ValueError as exc:
+        raise SubmissionUnknown("RPC returned an invalid anchor transaction hash") from exc
+    if not transaction_hash.startswith("0x"):
+        raise SubmissionUnknown("RPC returned an invalid anchor transaction hash")
+    return {"transaction_hash": transaction_hash.lower(), "chain_id": chain_id}
+
+
+def wait_for_anchor(
+    submission: RootSubmission,
+    root: str,
+    leaf_count: int,
+) -> AnchorReceipt:
+    """Wait for the submitted transaction and the configured confirmation depth."""
+    _, payload = _validate_anchor_input(root, leaf_count)
+    normalized_root = payload[:66]
+    transaction_hash = submission.get("transaction_hash")
+    chain_id = submission.get("chain_id")
+    if not isinstance(transaction_hash, str) or len(transaction_hash) != 66:
+        raise ValueError("submission transaction_hash must be a 0x-prefixed 32-byte hash")
+    if not transaction_hash.startswith("0x"):
+        raise ValueError("submission transaction_hash must be a 0x-prefixed 32-byte hash")
+    try:
+        bytes.fromhex(transaction_hash[2:])
+    except ValueError as exc:
+        raise ValueError("submission transaction_hash must be hexadecimal") from exc
+    if not isinstance(chain_id, int) or isinstance(chain_id, bool) or chain_id < 1:
+        raise ValueError("submission chain_id must be a positive integer")
     return _wait_for_receipt(
-        transaction_hash,
-        normalized_root,
-        leaf_count,
-        chain_id,
+        transaction_hash.lower(), normalized_root, leaf_count, chain_id
     )
+
+
+def anchor_root(root: str, leaf_count: int) -> AnchorReceipt:
+    """Broadcast a root, then wait for its receipt and confirmation depth."""
+    submission = submit_root(root, leaf_count)
+    return wait_for_anchor(submission, root, leaf_count)

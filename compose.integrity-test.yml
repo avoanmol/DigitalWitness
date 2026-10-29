@@ -1,0 +1,75 @@
+# Isolated synthetic acceptance stack: no .env, published ports, or production volumes.
+name: dw-integrity-check
+x-test-env: &test-env
+  DW_INTEGRITY_TEST_MODE: "1"
+  DATABASE_URL: postgresql+psycopg://dwtest:disposable-test-password@db:5432/dw_integrity_test
+  JWT_SECRET: disposable-test-jwt-secret-never-for-real-users-12345
+  RECEIPT_HMAC_KEY: disposable-test-receipt-secret-never-for-real-users
+  EVIDENCE_ENC_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: dwtest
+  MINIO_SECRET_KEY: disposable-test-storage-password
+  MINIO_BUCKET: dw-integrity-test
+  CHAIN_RPC_URL: http://chain:8545
+  CHAIN_EXPECTED_ID: "31337"
+  CHAIN_CONTRACT_ADDRESS: "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+  CHAIN_SENDER_ADDRESS: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+  CHAIN_PRIVATE_KEY: ""
+  CHAIN_CONFIRMATIONS: "1"
+  LLM_ENABLED: "false"
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: dw_integrity_test
+      POSTGRES_USER: dwtest
+      POSTGRES_PASSWORD: disposable-test-password
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dwtest -d dw_integrity_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  minio:
+    image: docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    command: server /data
+    tmpfs: [/data]
+    environment:
+      MINIO_ROOT_USER: dwtest
+      MINIO_ROOT_PASSWORD: disposable-test-storage-password
+  chain:
+    build: {context: ., dockerfile: Dockerfile.chain}
+    healthcheck:
+      test: ["CMD", "node", "scripts/chain-health.mjs"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  api:
+    build: {context: ., dockerfile: Dockerfile}
+    environment: *test-env
+    command: ["sh", "-c", "python -m alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+    depends_on:
+      db: {condition: service_healthy}
+      chain: {condition: service_healthy}
+      minio: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  ai-worker:
+    build: {context: ., dockerfile: Dockerfile}
+    environment:
+      <<: *test-env
+      AI_WORKER_POLL_SECONDS: "0.5"
+    depends_on:
+      api: {condition: service_healthy}
+    command: ["python", "-m", "backend.app.ai.worker"]
+  checks:
+    profiles: ["checks"]
+    build: {context: ., dockerfile: Dockerfile}
+    environment: *test-env
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./docs:/results
+    command: ["python", "scripts/integrity_acceptance.py"]

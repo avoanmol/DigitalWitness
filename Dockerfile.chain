@@ -1,0 +1,12 @@
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+WORKDIR /chain
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY hardhat.config.ts ./
+COPY contracts/ contracts/
+COPY scripts/local-chain.mjs scripts/chain-health.mjs ./scripts/
+RUN npx hardhat compile
+EXPOSE 8545
+CMD ["node", "scripts/local-chain.mjs"]

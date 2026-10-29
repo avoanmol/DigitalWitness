@@ -1,0 +1,21 @@
+# Opt-in disposable chain. Use only with a fresh development database.
+services:
+  chain:
+    profiles: ["local-chain"]
+  api:
+    environment: &local-chain-env
+      CHAIN_RPC_URL: http://chain:8545
+      CHAIN_EXPECTED_ID: "31337"
+      CHAIN_CONTRACT_ADDRESS: "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+      CHAIN_SENDER_ADDRESS: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+      CHAIN_PRIVATE_KEY: ""
+      CHAIN_CONFIRMATIONS: "1"
+    depends_on:
+      chain:
+        condition: service_healthy
+  integrity-worker:
+    environment:
+      <<: *local-chain-env
+    depends_on:
+      chain:
+        condition: service_healthy

@@ -1,9 +1,6 @@
 # DigitalWitness Merkle Specification
 
-Status: A-side Merkle, local contract, chain connector, batch ordering,
-proof verification, and the local non-destructive tamper demo are implemented.
-Database-backed worker transactions, API endpoints, and running-stack tamper
-tests require the shared models, storage, audit, and worker services.
+Status: Merkle logic, confirmed batch persistence, authenticated verification and proof routes, local chain configuration, and a disposable running-stack acceptance suite are implemented. Run the isolated stack before recording final runtime results.
 
 ## 1. Purpose
 
@@ -84,8 +81,9 @@ history. Integrity code must not create an independent migration history.
 
 ## 12. Local and testnet chain settings
 
-Local development uses the Hardhat node at http://127.0.0.1:8545 with one
-confirmation and an unlocked Hardhat sender account. Polygon Amoy uses
-AMOY_RPC_URL and AMOY_PRIVATE_KEY, chain ID 80002, and two confirmations.
-Never use the printed Hardhat accounts or their public test keys on a live
-network.
+The website demo uses Polygon Amoy with `CHAIN_EXPECTED_ID=80002`; the RPC
+chain ID is checked before a transaction is broadcast. Configure the Amoy RPC,
+deployed contract, and matching signer in the ignored root `.env`. The explicit
+local-chain profile and isolated acceptance stack override the expected ID to
+31337 and must not be used with the Amoy demo database. Never use printed
+Hardhat accounts or their public test keys on a live network.
