@@ -2,7 +2,7 @@ import { demoAudit, demoCases, demoFlags, demoLinks, demoUsers } from "@/mocks/f
 import { getAccessToken, setSession } from "@/lib/session";
 import type { Analysis, AuditEntry, CaseActivityEvent, CaseDetail, CaseFilters, CaseInvestigationSummary, CaseLink, CaseSummary, ComplaintPacketInput, ComplaintPreview, EvidenceSummary, ExternalComplaintReference, FlagReviewReason, LinkReviewReason, PageResult, Receipt, ReviewInsights, Role, User, Verification } from "@/lib/types";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "production" ? "/api" : "http://127.0.0.1:8000")).replace(/\/$/, "");
 const MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 const MAX_UPLOAD_MB = Number(process.env.NEXT_PUBLIC_MAX_UPLOAD_MB || 100);
 
