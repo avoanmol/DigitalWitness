@@ -1,7 +1,8 @@
+
 "use client";
+
 import { usePathname, useRouter } from "next/navigation";
 
-// Start pages for each role: nothing sensible to go back to
 const HIDE_ON = ["/", "/login", "/report/new", "/cases"];
 
 export default function BackButton() {
@@ -11,19 +12,24 @@ export default function BackButton() {
   if (HIDE_ON.includes(pathname)) return null;
 
   function goBack() {
-    if (window.history.length > 1) router.back();
-    else router.push("/cases"); // opened directly, so no history to go back to
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/cases");
+    }
   }
 
   return (
-    <div className="mt-4">
+    <div className="mt-5">
       <button
         type="button"
         onClick={goBack}
         aria-label="Go back"
-        className="group inline-flex items-center gap-2 rounded-full border border-ink px-4 py-1.5 text-sm transition hover:bg-ink hover:text-paper"
+        className="group inline-flex items-center gap-2 border-b border-transparent py-1 text-sm text-[#666666] transition hover:border-[#AD841E] hover:text-[#242424]"
       >
-        <span className="transition group-hover:-translate-x-0.5">←</span>
+        <span className="transition-transform group-hover:-translate-x-1">
+          ←
+        </span>
         Back
       </button>
     </div>

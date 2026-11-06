@@ -1,10 +1,16 @@
 import { Suspense } from "react";
-import CaseView from "@/components/CaseView";
+import LinksView from "@/components/LinksView";
 
-export default function CasePage() {
+export default function CaseLinksPage() {
   return (
-    <Suspense fallback={<p className="mt-10 text-center text-sm text-muted">Loading case…</p>}>
-      <CaseView />
+    <Suspense
+      fallback={
+        <p className="mt-12 text-center text-sm text-[#777777]">
+          Loading linked cases...
+        </p>
+      }
+    >
+      <LinksView />
     </Suspense>
   );
 }

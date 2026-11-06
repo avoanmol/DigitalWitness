@@ -1,13 +1,26 @@
 "use client";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clearSession, useUser } from "@/lib/auth";
 import type { Role } from "@/lib/types";
 
 const links: { href: string; label: string; roles: Role[] }[] = [
-  { href: "/report/new", label: "Report", roles: ["reporter", "investigator", "admin"] },
-  { href: "/cases", label: "Cases", roles: ["investigator", "legal", "admin"] },
-  { href: "/audit", label: "Audit", roles: ["legal", "admin"] },
+  {
+    href: "/report/new",
+    label: "Report",
+    roles: ["reporter", "investigator", "admin"],
+  },
+  {
+    href: "/cases",
+    label: "Cases",
+    roles: ["investigator", "legal", "admin"],
+  },
+  {
+    href: "/audit",
+    label: "Audit Trail",
+    roles: ["investigator", "legal", "admin"],
+  },
 ];
 
 const pill =
@@ -16,7 +29,10 @@ const pill =
 export default function RoleNav() {
   const user = useUser();
   const router = useRouter();
-  const visible = user ? links.filter((l) => l.roles.includes(user.role)) : [];
+
+  const visible = user
+    ? links.filter((link) => link.roles.includes(user.role))
+    : [];
 
   function logout() {
     clearSession();
@@ -24,17 +40,25 @@ export default function RoleNav() {
   }
 
   return (
-    <nav className="flex items-center gap-4 text-sm">
-      {visible.map((l) => (
-        <Link key={l.href} href={l.href}
-          className="hidden text-muted transition hover:text-ink sm:block">
-          {l.label}
+    <nav className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm">
+      {visible.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className="text-muted transition hover:text-ink"
+        >
+          {link.label}
         </Link>
       ))}
+
       {user ? (
-        <button onClick={logout} className={pill}>Log out</button>
+        <button onClick={logout} className={pill}>
+          Log out
+        </button>
       ) : (
-        <Link href="/login" className={pill}>Log in</Link>
+        <Link href="/login" className={pill}>
+          Log in
+        </Link>
       )}
     </nav>
   );
