@@ -9,9 +9,11 @@ import { isMockMode } from "@/lib/api";
 import { LogoMark } from "@/components/logo-mark";
 
 const navItems = [
-  { href: "/cases", label: "My reports", investigatorLabel: "Cases", legalLabel: "Case review", adminLabel: "Case workspace", roles: ["reporter", "investigator", "legal", "admin"] },
+  { href: "/my-reports", label: "My reports", roles: ["reporter"] },
+  { href: "/cases", label: "Cases", investigatorLabel: "Cases", legalLabel: "Case review", adminLabel: "Case workspace", roles: ["investigator", "legal", "admin"] },
   { href: "/report/new", label: "Document evidence", roles: ["reporter"] },
-  { href: "/ai-review", label: "Review insights", roles: ["investigator", "legal", "admin"] },
+  { href: "/insights", label: "Review insights", roles: ["investigator", "legal", "admin"] },
+  { href: "/ai-review", label: "AI feedback", roles: ["investigator", "legal", "admin"] },
   { href: "/audit", label: "Audit trail", roles: ["legal", "admin"] },
   { href: "/admin/users", label: "User accounts", roles: ["admin"] },
 ];
@@ -32,7 +34,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
 
   return <div className="app-frame">
     <header className="dw-header">
-      <Link href={user.role === "reporter" ? "/report/new" : "/cases"} className="dw-brand" aria-label="DigitalWitness workspace">
+      <Link href={user.role === "reporter" ? "/my-reports" : "/cases"} className="dw-brand" aria-label="DigitalWitness workspace">
         <LogoMark size={30} />
         <span>Digital<span>Witness</span></span>
       </Link>
