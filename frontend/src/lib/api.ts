@@ -545,10 +545,13 @@ export async function getReviewInsights(): Promise<ReviewInsights> {
   return request<ReviewInsights>("/ai/review-insights");
 }
 
-export async function getAudit(caseId?: string): Promise<AuditEntry[]> {
-  if (MOCK) return demoAudit.filter((entry) => !caseId || entry.case_id === caseId).map((entry) => ({ ...entry }));
-  const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
-  const data = await request<AuditEntry[] | { items: AuditEntry[] }>(`/audit${query}`);
+export async function getAudit(options: { caseId?: string; targetId?: string; limit?: number; offset?: number } = {}): Promise<AuditEntry[]> {
+  const { caseId, targetId, limit = 50, offset = 0 } = options;
+  if (MOCK) return demoAudit.filter((entry) => (!caseId || entry.case_id === caseId) && (!targetId || entry.target_id === targetId)).slice(offset, offset + limit).map((entry) => ({ ...entry }));
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (caseId) query.set("case_id", caseId);
+  if (targetId) query.set("target_id", targetId);
+  const data = await request<AuditEntry[] | { items: AuditEntry[] }>(`/audit?${query.toString()}`);
   return Array.isArray(data) ? data : data.items;
 }
 

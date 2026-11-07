@@ -47,6 +47,7 @@ def create_audit_router(
     @router.get("/audit")
     def list_audit_events(
         case_id: UUID | None = None,
+        target_id: str | None = Query(default=None, min_length=1, max_length=255),
         limit: int = Query(default=200, ge=1, le=500),
         offset: int = Query(default=0, ge=0),
         db: Session = Depends(get_db_dependency),
@@ -56,6 +57,8 @@ def create_audit_router(
         query = select(AuditLog)
         if case_id is not None:
             query = query.where(AuditLog.case_id == case_id)
+        if target_id is not None:
+            query = query.where(AuditLog.target_id == target_id)
         rows = db.scalars(
             query.order_by(AuditLog.seq.desc()).offset(offset).limit(limit)
         ).all()
