@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, getAudit, verifyAudit } from "@/lib/api";
 import { formatDate, shortHash, titleCase } from "@/lib/format";
 import type { AuditEntry } from "@/lib/types";
@@ -23,22 +23,20 @@ export default function AuditPage() {
   const [chainResult, setChainResult] = useState<{ valid: boolean; entries_checked: number; failed_entry_id?: string | null } | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const loadEntries = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setEntries(await getAudit({ ...filters, limit: PAGE_SIZE, offset }));
-    } catch (reason) {
-      setError(reason instanceof ApiError ? reason.message : "Could not load the audit trail.");
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [filters, offset]);
-
   useEffect(() => {
-    if (authorized) void loadEntries();
-  }, [authorized, loadEntries, refresh]);
+    if (!authorized) return;
+    let active = true;
+    getAudit({ ...filters, limit: PAGE_SIZE, offset })
+      .then((result) => { if (active) { setEntries(result); setError(""); } })
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof ApiError ? reason.message : "Could not load the audit trail.");
+          setEntries([]);
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [authorized, filters, offset, refresh]);
 
   async function checkChain() {
     setChecking(true);
@@ -53,11 +51,13 @@ export default function AuditPage() {
   }
 
   function applyFilters() {
+    setLoading(true);
     setOffset(0);
     setFilters({ caseId: caseDraft.trim(), targetId: targetDraft.trim() });
   }
 
   function clearFilters() {
+    setLoading(true);
     setCaseDraft("");
     setTargetDraft("");
     setOffset(0);
@@ -70,7 +70,7 @@ export default function AuditPage() {
     <div className="page-heading heading-row">
       <div><div className="eyebrow">GOVERNANCE</div><h1>Audit trail</h1><p>Append-only history of case and evidence actions. The API enforces access for legal and admin roles.</p></div>
       <div className="heading-actions">
-        <button className="button button-subtle" onClick={() => setRefresh((value) => value + 1)} disabled={loading}>Refresh events</button>
+        <button className="button button-subtle" onClick={() => { setLoading(true); setRefresh((value) => value + 1); }} disabled={loading}>Refresh events</button>
         <button className="button button-primary" onClick={checkChain} disabled={checking}>{checking ? "Checking chain…" : "Verify audit chain"}<span aria-hidden="true">↻</span></button>
       </div>
     </div>
@@ -93,7 +93,7 @@ export default function AuditPage() {
           <td><code title={entry.entry_hash}>{shortHash(entry.entry_hash, 8)}</code></td>
           <td title={new Date(entry.created_at).toISOString()}>{formatDate(entry.created_at)}</td>
         </tr>)}</tbody></table></div>
-        <div className="table-pagination"><span>Showing {offset + 1}–{offset + entries.length} events</span><div><button className="button button-subtle" disabled={offset === 0 || loading} onClick={() => setOffset((value) => Math.max(0, value - PAGE_SIZE))}>Previous</button><span className="page-number">{Math.floor(offset / PAGE_SIZE) + 1}</span><button className="button button-subtle" disabled={entries.length < PAGE_SIZE || loading} onClick={() => setOffset((value) => value + PAGE_SIZE)}>Next</button></div></div>
+        <div className="table-pagination"><span>Showing {offset + 1}–{offset + entries.length} events</span><div><button className="button button-subtle" disabled={offset === 0 || loading} onClick={() => { setLoading(true); setOffset((value) => Math.max(0, value - PAGE_SIZE)); }}>Previous</button><span className="page-number">{Math.floor(offset / PAGE_SIZE) + 1}</span><button className="button button-subtle" disabled={entries.length < PAGE_SIZE || loading} onClick={() => { setLoading(true); setOffset((value) => value + PAGE_SIZE); }}>Next</button></div></div>
       </>}
     </section>
     <div className="split-note"><div className="notice-icon">i</div><p><strong>Audit events are sensitive.</strong><br />The server enforces role permissions. Event details can include operational context; share exports only with authorized reviewers.</p></div>
