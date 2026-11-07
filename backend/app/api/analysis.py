@@ -50,6 +50,7 @@ def _analysis_json(db: Session, evidence: Evidence, analysis: Analysis | None) -
         "language": analysis.language if analysis else None, "text": analysis.text if analysis else None,
         "model": analysis.model if analysis else None, "prompt_version": analysis.prompt_version if analysis else None,
         "analysis_source": analysis_json.get("source"),
+        "analysis_quality": analysis_json.get("analysis_quality"),
         "human_review_required": True,
         "investigation_categories": analysis_json.get("investigation_categories", (evidence.metadata_json or {}).get("investigation_categories", [])),
         "extraction_method": analysis_json.get("extraction_method"),
@@ -296,20 +297,20 @@ def create_analysis_router(*, get_db_dependency: Callable[..., Any], get_current
         }
 
     @router.post("/evidence/{evidence_id}/analyse", status_code=status.HTTP_202_ACCEPTED)
-    def request_analysis(evidence_id: UUID, request: Request,
+    def request_analysis(evidence_id: UUID, request: Request, refresh: bool = False,
         current_user: User = Depends(get_current_user_dependency), db: Session = Depends(get_db_dependency)):
         _require_role(current_user, REVIEW_ROLES)
-        evidence = db.get(Evidence, evidence_id)
+        evidence = db.scalar(select(Evidence).where(Evidence.id == evidence_id).with_for_update())
         if evidence is None:
             raise HTTPException(status_code=404, detail="Evidence not found.")
         _require_case_access(current_user, db, evidence.case_id)
         analysis = db.scalar(select(Analysis).where(Analysis.evidence_id == evidence_id))
-        if analysis is None or analysis.status not in {"done", "running"}:
+        if analysis is None or analysis.status not in {"done", "running"} or (refresh and analysis.status == "done"):
             evidence.analysis_status = "pending"
             if analysis is not None:
                 analysis.status = "pending"
             enqueue_analysis(db, str(evidence_id))
-        append_audit_event(db, action="analysis_requested", target_type="evidence",
+        append_audit_event(db, action="analysis_refresh_requested" if refresh else "analysis_requested", target_type="evidence",
             actor_id=current_user.id, actor_role=current_user.role, target_id=str(evidence_id),
             case_id=evidence.case_id, ip=request.client.host if request.client else None)
         db.commit()

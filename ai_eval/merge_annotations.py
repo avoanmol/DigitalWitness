@@ -55,8 +55,19 @@ def parse_annotation(row, case_id, source):
     expected_categories = parse_categories(row.get("expected_categories"), case_id, source)
     if expected_threat != bool(expected_categories):
         raise ValueError(f"Threat/no-threat and category labels disagree in {source} for case {case_id}; use an empty category list for no threat and 'other' when threat is present but uncategorised.")
+    features = {}
+    for key in ("demand", "repeated_contact", "impersonation_claim"):
+        value = (row.get(key) or "").strip().lower()
+        if value not in {"yes", "no", "unclear"}:
+            raise ValueError(f"{key} must be yes/no/unclear in {source} for case {case_id}.")
+        features[key] = value
+    quote = (row.get("supporting_quote") or "").strip()
+    evidence_text = (row.get("evidence_text") or "").strip()
+    if expected_threat and (not quote or quote not in evidence_text):
+        raise ValueError(f"A threat label needs a verbatim supporting quote in {source} for case {case_id}.")
     return {"reviewer_id": reviewer, "scenario": scenario, "language": language,
-            "expected_threat": expected_threat, "expected_categories": expected_categories}
+            "expected_threat": expected_threat, "expected_categories": expected_categories,
+            **features, "supporting_quote": quote}
 
 
 def validate_source(row):
@@ -131,12 +142,17 @@ def main():
             if final["expected_threat"] != bool(final["expected_categories"]):
                 raise ValueError(f"Adjudicated threat/no-threat and category labels disagree for case {case_id}.")
             adjudicated_count += 1
+        split_group = str(source.get("split_group", "")).strip()
+        if not split_group:
+            raise ValueError(f"Source {case_id} needs a random split_group to prevent conversation/source leakage.")
         record = {key: value for key, value in source.items() if key in {
-            "id", "source_type", "consent_reference", "source_reference", "license", "text", "file", "expected_text"
+            "id", "split_group", "source_type", "consent_reference", "source_reference", "license", "text", "file", "expected_text"
         } and value not in (None, "")}
         record.update({"scenario": final["scenario"], "language": final["language"],
                        "expected_threat": final["expected_threat"],
                        "expected_categories": final["expected_categories"],
+                       "label_features": {key: left[key] for key in ("demand", "repeated_contact", "impersonation_claim")},
+                       "supporting_quote": left["supporting_quote"],
                        "reviewers": [next(iter(ids_a)), next(iter(ids_b))] + ([adjudicator_id] if adjudicator_id else []),
                        "reviewer_labels": [
                            {"reviewer_id": left["reviewer_id"], "expected_threat": left["expected_threat"], "expected_categories": left["expected_categories"], "scenario": left["scenario"], "language": left["language"]},

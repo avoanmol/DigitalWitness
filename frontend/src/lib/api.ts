@@ -350,7 +350,7 @@ export async function downloadComplaintPacket(caseId: string, caseRef: string, d
       `Platform: ${details.platform}`,
       `Incident date: ${details.incident_date || "Not provided"}`,
       `Statement: ${details.statement}`,
-      ...preview.evidence.map((evidence) => `${evidence.filename} | SHA-256 ${evidence.sha256} | ${evidence.verification} / ${evidence.anchor_status}`),
+      ...preview.evidence.filter((evidence) => details.evidence_feedback?.find((item) => item.evidence_id === evidence.evidence_id)?.include !== false).map((evidence) => `${evidence.filename} | SHA-256 ${evidence.sha256} | ${evidence.verification} / ${evidence.anchor_status}`),
       ...preview.ai_notes.flatMap((note) => {
         const feedback = details.ai_note_feedback?.find((item) => item.flag_id === note.flag_id);
         if (feedback && !feedback.include) return [];
@@ -495,9 +495,9 @@ export async function getAnalysis(evidenceId: string): Promise<Analysis> {
   return request<Analysis>(`/evidence/${encodeURIComponent(evidenceId)}/analysis`);
 }
 
-export async function requestAnalysis(evidenceId: string): Promise<Analysis> {
+export async function requestAnalysis(evidenceId: string, refresh = false): Promise<Analysis> {
   if (MOCK) return getAnalysis(evidenceId);
-  return request<Analysis>("/evidence/" + encodeURIComponent(evidenceId) + "/analyse", { method: "POST" });
+  return request<Analysis>("/evidence/" + encodeURIComponent(evidenceId) + "/analyse" + (refresh ? "?refresh=true" : ""), { method: "POST" });
 }
 
 export async function updateFlag(id: string, reviewStatus: "confirmed" | "rejected", reviewReason: FlagReviewReason = "other"): Promise<void> {

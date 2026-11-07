@@ -26,5 +26,9 @@
     "hardhat": "^3.20.0",
     "typescript": "~6.0.3",
     "viem": "^2.57.7"
+  },
+  "dependencies": {
+    "@neon/config": "^1.11.3",
+    "@neon/env": "^1.6.15"
   }
 }

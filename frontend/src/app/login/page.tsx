@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError, isMockMode, registerReporter, signIn } from "@/lib/api";
@@ -16,15 +15,15 @@ export default function LoginPage({ initialMode = "login" }: { initialMode?: "lo
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     try {
       const user = mode === "register"
         ? await registerReporter(name.trim(), email.trim(), password)
         : await signIn(email.trim(), password);
-      router.replace(user.role === "reporter" ? "/report/new" : "/cases");
+      // Force a same-origin navigation after storing the session. This avoids
+      // stale App Router state trapping users on the auth page after login.
+      window.location.replace(user.role === "reporter" ? "/my-reports" : "/cases");
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "Could not sign in. Please try again.");
     } finally { setBusy(false); }

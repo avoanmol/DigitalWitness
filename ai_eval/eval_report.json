@@ -73,36 +73,36 @@
     "count": 28,
     "labeling": "Hand-authored synthetic cases labeled by the project team; no independent annotator review.",
     "overall": {
-      "tp": 6,
-      "fp": 6,
-      "fn": 14,
-      "tn": 2,
-      "precision": 0.5,
-      "recall": 0.3,
-      "f1": 0.375,
-      "specificity": 0.25
+      "tp": 11,
+      "fp": 1,
+      "fn": 9,
+      "tn": 7,
+      "precision": 0.9167,
+      "recall": 0.55,
+      "f1": 0.6875,
+      "specificity": 0.875
     },
     "by_scenario": {
       "defamation_morphing": {
         "samples": 4,
-        "tp": 0,
+        "tp": 1,
         "fp": 0,
-        "fn": 4,
+        "fn": 3,
         "tn": 0,
-        "precision": null,
-        "recall": 0.0,
-        "f1": 0.0,
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4,
         "specificity": null
       },
       "extortion_blackmail": {
         "samples": 4,
-        "tp": 3,
+        "tp": 4,
         "fp": 0,
-        "fn": 1,
+        "fn": 0,
         "tn": 0,
         "precision": 1.0,
-        "recall": 0.75,
-        "f1": 0.8571,
+        "recall": 1.0,
+        "f1": 1.0,
         "specificity": null
       },
       "fake_profile_impersonation": {
@@ -118,25 +118,25 @@
       },
       "harassment_stalking": {
         "samples": 4,
-        "tp": 0,
+        "tp": 3,
         "fp": 0,
-        "fn": 4,
+        "fn": 1,
         "tn": 0,
-        "precision": null,
-        "recall": 0.0,
-        "f1": 0.0,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571,
         "specificity": null
       },
       "hard_negative": {
         "samples": 8,
         "tp": 0,
-        "fp": 6,
+        "fp": 1,
         "fn": 0,
-        "tn": 2,
+        "tn": 7,
         "precision": 0.0,
         "recall": null,
         "f1": 0.0,
-        "specificity": 0.25
+        "specificity": 0.875
       },
       "intimate_image_abuse": {
         "samples": 4,
@@ -153,71 +153,43 @@
     "by_language": {
       "en": {
         "samples": 14,
-        "tp": 3,
-        "fp": 2,
-        "fn": 7,
-        "tn": 2,
-        "precision": 0.6,
-        "recall": 0.3,
-        "f1": 0.4,
-        "specificity": 0.5
+        "tp": 8,
+        "fp": 1,
+        "fn": 2,
+        "tn": 3,
+        "precision": 0.8889,
+        "recall": 0.8,
+        "f1": 0.8421,
+        "specificity": 0.75
       },
       "hi": {
         "samples": 7,
-        "tp": 1,
-        "fp": 2,
-        "fn": 4,
-        "tn": 0,
-        "precision": 0.3333,
-        "recall": 0.2,
-        "f1": 0.25,
-        "specificity": 0.0
+        "tp": 2,
+        "fp": 0,
+        "fn": 3,
+        "tn": 2,
+        "precision": 1.0,
+        "recall": 0.4,
+        "f1": 0.5714,
+        "specificity": 1.0
       },
       "kn": {
         "samples": 7,
-        "tp": 2,
-        "fp": 2,
-        "fn": 3,
-        "tn": 0,
-        "precision": 0.5,
-        "recall": 0.4,
-        "f1": 0.4444,
-        "specificity": 0.0
+        "tp": 1,
+        "fp": 0,
+        "fn": 4,
+        "tn": 2,
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1": 0.3333,
+        "specificity": 1.0
       }
     },
     "errors": [
       {
-        "id": "holdout-01",
-        "language": "en",
-        "scenario": "harassment_stalking",
-        "expected_threat": true,
-        "predicted_threat": false
-      },
-      {
-        "id": "holdout-02",
-        "language": "en",
-        "scenario": "harassment_stalking",
-        "expected_threat": true,
-        "predicted_threat": false
-      },
-      {
-        "id": "holdout-03",
-        "language": "hi",
-        "scenario": "harassment_stalking",
-        "expected_threat": true,
-        "predicted_threat": false
-      },
-      {
         "id": "holdout-04",
         "language": "kn",
         "scenario": "harassment_stalking",
-        "expected_threat": true,
-        "predicted_threat": false
-      },
-      {
-        "id": "holdout-05",
-        "language": "en",
-        "scenario": "extortion_blackmail",
         "expected_threat": true,
         "predicted_threat": false
       },
@@ -243,13 +215,6 @@
         "predicted_threat": false
       },
       {
-        "id": "holdout-13",
-        "language": "en",
-        "scenario": "fake_profile_impersonation",
-        "expected_threat": true,
-        "predicted_threat": false
-      },
-      {
         "id": "holdout-15",
         "language": "hi",
         "scenario": "fake_profile_impersonation",
@@ -257,14 +222,14 @@
         "predicted_threat": false
       },
       {
-        "id": "holdout-17",
-        "language": "en",
-        "scenario": "defamation_morphing",
+        "id": "holdout-16",
+        "language": "kn",
+        "scenario": "fake_profile_impersonation",
         "expected_threat": true,
         "predicted_threat": false
       },
       {
-        "id": "holdout-18",
+        "id": "holdout-17",
         "language": "en",
         "scenario": "defamation_morphing",
         "expected_threat": true,
@@ -285,43 +250,8 @@
         "predicted_threat": false
       },
       {
-        "id": "holdout-22",
-        "language": "en",
-        "scenario": "hard_negative",
-        "expected_threat": false,
-        "predicted_threat": true
-      },
-      {
         "id": "holdout-23",
         "language": "en",
-        "scenario": "hard_negative",
-        "expected_threat": false,
-        "predicted_threat": true
-      },
-      {
-        "id": "holdout-24",
-        "language": "hi",
-        "scenario": "hard_negative",
-        "expected_threat": false,
-        "predicted_threat": true
-      },
-      {
-        "id": "holdout-25",
-        "language": "hi",
-        "scenario": "hard_negative",
-        "expected_threat": false,
-        "predicted_threat": true
-      },
-      {
-        "id": "holdout-26",
-        "language": "kn",
-        "scenario": "hard_negative",
-        "expected_threat": false,
-        "predicted_threat": true
-      },
-      {
-        "id": "holdout-27",
-        "language": "kn",
         "scenario": "hard_negative",
         "expected_threat": false,
         "predicted_threat": true
@@ -376,6 +306,9 @@
       "consented_redacted"
     ],
     "reviewer_count_minimum": 2,
+    "reviewer_category_labeled_cases": 0,
+    "reviewer_category_unanimous_cases": 0,
+    "reviewer_category_agreement": null,
     "overall": {
       "tp": 0,
       "fp": 0,
@@ -431,6 +364,32 @@
         "specificity": null
       }
     },
+    "category_metrics": {
+      "status": "category_labels_not_provided",
+      "case_count": 0,
+      "by_category": {}
+    },
+    "categories_by_language": {
+      "en": {
+        "status": "category_labels_not_provided",
+        "case_count": 0,
+        "by_category": {}
+      }
+    },
+    "categories_by_scenario": {
+      "harassment_stalking": {
+        "status": "category_labels_not_provided",
+        "case_count": 0,
+        "by_category": {}
+      }
+    },
+    "categories_by_media_type": {
+      "text": {
+        "status": "category_labels_not_provided",
+        "case_count": 0,
+        "by_category": {}
+      }
+    },
     "mean_ocr_cer": null,
     "extraction_methods": {
       "reviewed_transcript": 1
@@ -438,62 +397,30 @@
   },
   "ocr": {
     "fixture_count": 4,
-    "evaluated_count": 4,
-    "skipped": [],
+    "evaluated_count": 0,
+    "skipped": [
+      {
+        "id": "ocr-threat-image",
+        "reason": "Tesseract OCR is not installed or is not on PATH."
+      }
+    ],
     "formats": {
       "png": 2,
       "pdf": 2
     },
-    "mean_cer": 0.0166,
-    "threat_matches": 4,
+    "mean_cer": null,
+    "threat_matches": 0,
     "threat_metrics": {
-      "tp": 2,
+      "tp": 0,
       "fp": 0,
       "fn": 0,
-      "tn": 2,
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "specificity": 1.0
+      "tn": 0,
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "specificity": null
     },
-    "results": [
-      {
-        "id": "ocr-threat-image",
-        "method": "tesseract_ocr:eng+hin+kan",
-        "cer": 0.02,
-        "expected_threat": true,
-        "detected_threat": true,
-        "threat_match": true,
-        "text_extracted": true
-      },
-      {
-        "id": "ocr-safe-quote",
-        "method": "tesseract_ocr:eng+hin+kan",
-        "cer": 0.017857142857142856,
-        "expected_threat": false,
-        "detected_threat": false,
-        "threat_match": true,
-        "text_extracted": true
-      },
-      {
-        "id": "ocr-handle-pdf",
-        "method": "tesseract_ocr:eng+hin+kan",
-        "cer": 0.0,
-        "expected_threat": false,
-        "detected_threat": false,
-        "threat_match": true,
-        "text_extracted": true
-      },
-      {
-        "id": "ocr-blackmail-pdf",
-        "method": "tesseract_ocr:eng+hin+kan",
-        "cer": 0.02857142857142857,
-        "expected_threat": true,
-        "detected_threat": true,
-        "threat_match": true,
-        "text_extracted": true
-      }
-    ]
+    "results": []
   },
   "limitations": [
     "Results measure these synthetic examples only and do not estimate real-world accuracy.",

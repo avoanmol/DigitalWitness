@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { clearSession, useSessionUser } from "@/lib/session";
+import { clearSession, useSessionHydrated, useSessionUser } from "@/lib/session";
 import { isMockMode } from "@/lib/api";
 import { LogoMark } from "@/components/logo-mark";
 
@@ -20,17 +20,24 @@ const navItems = [
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const user = useSessionUser();
+  const sessionHydrated = useSessionHydrated();
   const pathname = usePathname();
   const router = useRouter();
 
-  useEffect(() => { if (!user) router.replace("/login"); }, [router, user]);
+  useEffect(() => { if (sessionHydrated && !user) router.replace("/login"); }, [router, sessionHydrated, user]);
 
   function logout() {
     clearSession();
     router.replace("/login");
   }
 
-  if (!user) return <main className="loading-screen"><div className="spinner" aria-hidden="true" /><p>Opening your workspace…</p></main>;
+  const activeItem = navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const activeLabel = user?.role === "investigator" && activeItem && "investigatorLabel" in activeItem ? activeItem.investigatorLabel
+    : user?.role === "legal" && activeItem && "legalLabel" in activeItem ? activeItem.legalLabel
+      : user?.role === "admin" && activeItem && "adminLabel" in activeItem ? activeItem.adminLabel
+        : activeItem?.label || "Workspace";
+
+  if (!sessionHydrated || !user) return <main className="loading-screen"><div className="spinner" aria-hidden="true" /><p>Opening your workspace…</p></main>;
 
   return <div className="app-frame">
     <header className="dw-header">

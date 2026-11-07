@@ -6,11 +6,11 @@ This workflow creates two separate local review sheets, then combines labels int
 
 1. Use only consented, de-identified material or public data whose license clearly permits this evaluation. Use random case IDs. Do not collect intimate images; redacted text or consented descriptions are enough for that scenario.
 2. Put reviewed transcripts or local file paths under `ai_eval/private_assets/`. Create `ai_eval/private_sources.jsonl` with one JSON object per item. For text, include `text`; for an image/PDF, include `file` such as `private_assets/item-001.png`. Each row must include a permitted `source_type` and its non-identifying consent reference or public source/license.
-3. Generate two separate sheets, one per pseudonymous reviewer ID:
+3. Give related messages from one conversation/source the same random `split_group`; unrelated sources get different groups. Do not use a person's name, handle, or account ID as this value. Generate two separate sheets, one per pseudonymous reviewer ID:
 
    `python ai_eval/prepare_annotations.py --reviewer-a R1 --reviewer-b R2`
 
-4. Give each reviewer their own CSV and access to the same de-identified source, without model output or the other reviewer's labels. They fill `scenario`, `language`, `expected_threat` (`true`/`false`), and `expected_categories`. Category values are semicolon-separated from `cyberstalking_bullying`, `blackmail_threatening`, `intimate_image_abuse`, `defamation_morphing`, `fake_profile_impersonation`, and `other`. Leave categories blank for a no-threat case; use `other` for a threat that does not fit the five core categories. Do not reuse reviewer IDs for the adjudicator.
+4. Give each reviewer their own CSV and access to the same de-identified source, without model output or the other reviewer's labels. Each independently fills `scenario`, `language`, `expected_threat` (`true`/`false`), `expected_categories`, `demand`, `repeated_contact`, `impersonation_claim` (`yes`/`no`/`unclear`), and an exact `supporting_quote` for positives. Category values are semicolon-separated from `cyberstalking_bullying`, `blackmail_threatening`, `intimate_image_abuse`, `defamation_morphing`, `fake_profile_impersonation`, and `other`. Leave categories blank for a no-threat case; use `other` for a threat that does not fit the five core categories. Do not reuse reviewer IDs for the adjudicator.
 
 ## Label consistently
 
@@ -31,8 +31,12 @@ This workflow creates two separate local review sheets, then combines labels int
 
 Safety advice, support, news reporting, fictional dialogue, and hypothetical examples are not threat labels by themselves. Label only what the reviewed source supports; these labels do not determine authenticity, intent, guilt, or criminality.
 
-After both sheets are complete, merge locally:
+After both sheets are complete, merge locally. The merge refuses missing source groups, unsupported labels, missing positive quotes, and reviewer disagreement without adjudication:
 
 `python ai_eval/merge_annotations.py`
 
-The output defaults to `ai_eval/private_cases.generated.jsonl`; it does not overwrite the current evaluation dataset. Inspect it locally, then copy it to `ai_eval/private_cases.jsonl` when you are ready to run the private pilot. The report contains aggregate binary and per-category counts only; the category evaluator requires independent category labels from both reviewers.
+The output defaults to `ai_eval/private_cases.generated.jsonl`; it does not overwrite the current evaluation dataset. Create a deterministic source-grouped split before model tuning:
+
+`python ai_eval/split_reviewed_groups.py`
+
+It writes ignored local `private_development.jsonl` and `private_challenge.jsonl`; verify the challenge file is kept separate and run it only after tuning is frozen. Exact duplicate text cannot cross the split. Public offensive-language corpora must retain their original label task and may be used only as an auxiliary test; they cannot be relabeled as incident/threat examples without fresh scenario-specific human annotation. Check the source's access agreement and license before registration or use.

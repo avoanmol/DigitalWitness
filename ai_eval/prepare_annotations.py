@@ -23,7 +23,7 @@ def main():
     if not sources or any(not item for item in ids) or len(set(ids)) != len(ids):
         parser.error("The local source manifest must contain unique, non-empty case IDs.")
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    fields = ["case_id", "reviewer_id", "evidence_text", "evidence_file", "scenario", "language", "expected_threat", "expected_categories", "notes"]
+    fields = ["case_id", "reviewer_id", "evidence_text", "evidence_file", "context_summary", "scenario", "language", "expected_threat", "expected_categories", "demand", "repeated_contact", "impersonation_claim", "supporting_quote", "notes"]
     for reviewer, suffix in ((args.reviewer_a, "a"), (args.reviewer_b, "b")):
         path = args.out_dir / f"reviewer_{suffix}.csv"
         with path.open("w", newline="", encoding="utf-8-sig") as handle:
@@ -33,7 +33,10 @@ def main():
                 writer.writerow({
                     "case_id": row["id"], "reviewer_id": reviewer,
                     "evidence_text": row.get("text", ""), "evidence_file": row.get("file", ""),
-                    "scenario": "", "language": "", "expected_threat": "", "expected_categories": "", "notes": "",
+                    "context_summary": row.get("context_summary", ""),
+                    "scenario": "", "language": "", "expected_threat": "", "expected_categories": "",
+                    "demand": "", "repeated_contact": "", "impersonation_claim": "",
+                    "supporting_quote": "", "notes": "",
                 })
     print(f"Created two local annotation sheets for {len(sources)} case(s). Evidence text and file paths were not printed.")
     print(f"Keep ai_eval/reviewer_a.csv and ai_eval/reviewer_b.csv local and out of Git.")

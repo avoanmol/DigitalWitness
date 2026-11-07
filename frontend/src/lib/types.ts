@@ -147,6 +147,11 @@ export interface ComplaintAiNoteFeedback {
   reporter_comment?: string;
 }
 
+export interface ComplaintEvidenceFeedback {
+  evidence_id: string;
+  include: boolean;
+}
+
 export interface ComplaintPreview {
   case_id: string;
   case_ref: string;
@@ -172,6 +177,7 @@ export interface ComplaintPacketInput {
   district?: string;
   police_station?: string;
   statement: string;
+  evidence_feedback?: ComplaintEvidenceFeedback[];
   ai_note_feedback?: ComplaintAiNoteFeedback[];
   reviewed_evidence_and_notes: boolean;
   understands_not_submitted: boolean;
@@ -277,6 +283,14 @@ export interface Analysis {
   model?: string | null;
   prompt_version?: string | null;
   analysis_source?: string | null;
+  analysis_quality?: {
+    assessment: "review_suggested" | "no_signal" | "needs_review" | "not_assessed";
+    provider_status: string;
+    model_rule_disagreement: boolean;
+    rule_categories: string[];
+    model_categories: string[];
+    notes: string[];
+  } | null;
   human_review_required?: boolean;
   extraction_method?: string | null;
   investigation_categories?: string[];

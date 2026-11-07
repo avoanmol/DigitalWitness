@@ -240,6 +240,9 @@ node_modules
 /ai_eval/reviewer_b.csv
 /ai_eval/adjudications.csv
 /ai_eval/private_cases.generated.jsonl
+/ai_eval/private_development.jsonl
+/ai_eval/private_challenge.jsonl
+/ai_eval/public_artifacts.local.jsonl
 /ai_eval/development_report.json
 
 # Local backups contain encrypted evidence and database contents.
@@ -268,3 +271,4 @@ node_modules/
 # Local private keys
 *.pem
 *.key
+.neon

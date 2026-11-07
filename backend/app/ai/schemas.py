@@ -1,6 +1,6 @@
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EntityType = Literal["handle", "phone", "email", "url"]
 Severity = Literal["low", "medium", "high", "critical"]
@@ -25,10 +25,18 @@ class LLMThreat(BaseModel):
 
 class LLMResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    text: str = Field(default="", max_length=100000)
-    language: str | None = Field(default=None, max_length=20)
-    entities: list[LLMEntity] = Field(default_factory=list, max_length=200)
-    threats: list[LLMThreat] = Field(default_factory=list, max_length=100)
+    text: str = Field(max_length=100000)
+    language: str | None = Field(max_length=20)
+    entities: list[LLMEntity] = Field(max_length=200)
+    threats: list[LLMThreat] = Field(max_length=100)
+    assessment: Literal["flag", "no_flag", "uncertain"]
+    assessment_reason: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def consistent_assessment(self):
+        if (self.assessment == "flag") != bool(self.threats):
+            raise ValueError("flag requires threats; no_flag/uncertain require an empty threats list")
+        return self
 
 class FlagReviewRequest(BaseModel):
     review_status: Literal["confirmed", "rejected"]

@@ -21,7 +21,7 @@ Use the receipt screen to save the JSON and confirm the server signature. Open a
 
 ## Prepare a complaint draft
 
-From one of your own cases, choose **Prepare complaint draft**. Add only the incident details needed to explain what happened, review the case evidence and any case-linked AI notes, then confirm both review checkboxes to download the packet. The form does not request Aadhaar, passwords, or a full home address. The statement is used to generate the download and is not saved in the database or audit trail; the audit event records only the packet hash, selected channel, format, and record counts.
+From one of your own cases, choose **Prepare complaint draft**. Add only the incident details needed to explain what happened, choose which case evidence and AI notes to list, then confirm both review checkboxes to download the packet. Leaving evidence out of the packet does not delete or change the preserved original. No AI notes does not mean a file is faulty or irrelevant; `altered` is reserved for a fingerprint or proof mismatch. The form does not request Aadhaar, passwords, or a full home address. The statement is used to generate the download and is not saved in the database or audit trail; the audit event records only the packet hash, selected channel, format, and record counts.
 
 When the entered statement or case notes contain characters the built-in PDF font cannot represent, the download switches to a UTF-8 text file so the wording is preserved. Open and review that text before using it on the official form.
 

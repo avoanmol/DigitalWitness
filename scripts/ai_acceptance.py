@@ -65,12 +65,12 @@ def main() -> None:
     investigator_auth = {"Authorization": "Bearer " + create_access_token(investigator.id, investigator.role)}
     print("PASS: public signup, login, profile, and reporter case creation", flush=True)
 
-    def upload(case_id: str, content: str) -> str:
+    def upload(case_id: str, content: str, filename: str = "synthetic-message.txt") -> str:
         response = client.post(
             "/evidence/upload",
             params={"case_id": case_id},
             headers=reporter_auth,
-            files={"file": ("synthetic-message.txt", content.encode("utf-8"), "text/plain")},
+            files={"file": (filename, content.encode("utf-8"), "text/plain")},
         )
         assert response.status_code == 201, response.text
         return response.json()["id"]
@@ -127,11 +127,24 @@ def main() -> None:
     assert summary["limitations"]
     print("PASS: case summary links to saved evidence, extraction coverage, and pending review", flush=True)
 
+    unrelated_evidence = upload(first_id, "cedar violet 4817 sample-only unrelated notes", "unrelated-demo.txt")
+    deadline = time.monotonic() + 30
+    unrelated_analysis = None
+    while time.monotonic() < deadline:
+        response = client.get(f"/evidence/{unrelated_evidence}/analysis", headers=investigator_auth)
+        if response.status_code == 200 and response.json().get("status") not in {"pending", "running"}:
+            unrelated_analysis = response.json()
+            break
+        time.sleep(.25)
+    assert unrelated_analysis and unrelated_analysis["status"] == "done" and not unrelated_analysis["flags"], unrelated_analysis
+    print("PASS: unrelated synthetic text receives no threat flag and is not labeled tampered", flush=True)
+
     complaint_preview = client.get(f"/cases/{first_id}/complaint-preview", headers=reporter_auth)
     assert complaint_preview.status_code == 200, complaint_preview.text
     preview = complaint_preview.json()
-    assert preview["case_id"] == first_id and len(preview["evidence"]) == 1
+    assert preview["case_id"] == first_id and len(preview["evidence"]) == 2
     assert preview["evidence"][0]["evidence_id"] == first_evidence
+    assert {item["evidence_id"] for item in preview["evidence"]} == {first_evidence, unrelated_evidence}
     assert any(note["snippet"] == flag["snippet"] for note in preview["ai_notes"])
     assert "text" not in preview and "description" not in preview
     assert client.get(f"/cases/{first_id}/complaint-preview", headers=investigator_auth).status_code == 403
@@ -160,6 +173,10 @@ def main() -> None:
         "state": "Synthetic state",
         "district": "Synthetic district",
         "statement": "Synthetic reporter statement for packet acceptance testing only.",
+        "evidence_feedback": [
+            {"evidence_id": first_evidence, "include": True},
+            {"evidence_id": unrelated_evidence, "include": False},
+        ],
         "ai_note_feedback": [{
             "flag_id": preview["ai_notes"][0]["flag_id"],
             "include": True,
@@ -192,13 +209,36 @@ def main() -> None:
             AuditLog.action == "complaint_packet.generated",
         ).order_by(AuditLog.seq.desc()))
         assert audit is not None
-        assert set(audit.details) == {"sha256", "channel", "format", "evidence_count", "ai_note_count", "reporter_comment_count"}
+        assert set(audit.details) == {"sha256", "channel", "format", "evidence_count", "evidence_available_count", "ai_note_count", "reporter_comment_count"}
         assert audit.details["format"] == "pdf"
+        assert audit.details["evidence_count"] == 1 and audit.details["evidence_available_count"] == 2
         assert audit.details["reporter_comment_count"] == 1
         assert packet_payload["statement"] not in json.dumps(audit.details)
         assert packet_payload["account_or_handle"] not in json.dumps(audit.details)
         assert packet_payload["ai_note_feedback"][0]["reporter_comment"] not in json.dumps(audit.details)
     assert "Synthetic reporter context note" in normalized_packet_text
+    assert "synthetic-message.txt" in normalized_packet_text
+    assert "unrelated-demo.txt" not in normalized_packet_text
+
+    scenario_cases = (
+        ("Synthetic cyberstalking report", "An account kept calling after I asked it to stop and said it would follow me after work."),
+        ("Synthetic alleged morphing report", "A post shared a doctored photo and falsely claimed it showed me doing something I never did."),
+    )
+    for title, message in scenario_cases:
+        scenario_case = client.post("/cases", headers=reporter_auth, json={"title": title, "description": "Fictional acceptance scenario."})
+        assert scenario_case.status_code == 201, scenario_case.text
+        scenario_id = scenario_case.json()["id"]
+        scenario_evidence = upload(scenario_id, message, f"{scenario_id[:8]}-scenario.txt")
+        scenario_preview = client.get(f"/cases/{scenario_id}/complaint-preview", headers=reporter_auth)
+        assert scenario_preview.status_code == 200 and scenario_preview.json()["evidence"][0]["evidence_id"] == scenario_evidence
+        scenario_packet = client.post(f"/cases/{scenario_id}/complaint-packet", headers=reporter_auth, json={
+            "channel": "cybercrime_portal", "platform": "Synthetic chat service",
+            "statement": "Synthetic reporter account for scenario acceptance only.",
+            "reviewed_evidence_and_notes": True, "understands_not_submitted": True,
+            "evidence_feedback": [{"evidence_id": scenario_evidence, "include": True}],
+        })
+        assert scenario_packet.status_code == 200 and scenario_packet.content.startswith(b"%PDF-"), scenario_packet.text[:500]
+    print("PASS: complaint drafts can be prepared for stalking and alleged-morphing reports", flush=True)
     omitted_notes_packet = client.post(
         f"/cases/{first_id}/complaint-packet", headers=reporter_auth,
         json={

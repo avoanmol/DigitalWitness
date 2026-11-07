@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from backend.app.ai.categories import clean_investigation_categories
 from backend.app.ai.extract import detect_language, extract_document_text, extract_entities
 from backend.app.ai.jobs import enqueue_linking
-from backend.app.ai.llm_client import PROMPT_VERSION, analyse_with_llm, configured_model
+from backend.app.ai.llm_client import PROMPT_VERSION, analyse_with_llm, configured_model, llm_enabled, LLMInputTooLong
+from backend.app.ai.decision import resolve_threats
 from backend.app.ai.normalise import normalise_entity
 from backend.app.ai.provenance import inspect_static_provenance
 from backend.app.ai.quality import describe_extraction_coverage
@@ -48,24 +49,7 @@ def _merge_llm_entities(text: str, entities: list, extracted: list) -> list:
 
 
 def _merge_threats(text: str, language: str, llm_result) -> list:
-    found = detect_threats(text, language)
-    keys = {(item.threat_class.casefold(), item.snippet) for item in found}
-    if llm_result:
-        from backend.app.ai.threats import ThreatCandidate
-        for item in llm_result.threats:
-            if item.snippet not in text:
-                continue
-            key = (item.threat_class.casefold(), item.snippet)
-            if key not in keys:
-                cautions = context_cautions(item.snippet, language)
-                reason = item.reason or "AI suggestion; requires human review."
-                confidence = item.confidence
-                if cautions:
-                    reason += " Context cues need review: " + ", ".join(cautions) + ". This does not decide whether the content is harmful."
-                    confidence = min(confidence, .42)
-                found.append(ThreatCandidate(item.threat_class, item.severity, item.snippet, confidence, reason, cautions))
-                keys.add(key)
-    return found[:100]
+    return resolve_threats(text, language, llm_result)[0]
 
 
 def analyse_evidence(evidence_id: str, session_factory) -> None:
@@ -111,6 +95,7 @@ def analyse_evidence(evidence_id: str, session_factory) -> None:
                           "metadata_present": False, "observations": [],
                           "caveat": "Metadata inspection unavailable; no authenticity conclusion is possible."}
         llm_result = None
+        provider_status = "not_attempted" if llm_enabled() else "disabled"
         is_image = mime_type in {"image/jpeg", "image/png", "image/webp"}
         is_video = mime_type in {"video/mp4", "video/quicktime", "video/webm"}
         if text.strip() or is_image or (is_video and frame_images):
@@ -122,13 +107,39 @@ def analyse_evidence(evidence_id: str, session_factory) -> None:
                     mime_type="image/jpeg" if is_video else mime_type,
                     investigation_categories=investigation_categories,
                 )
+                provider_status = "completed" if llm_result is not None else "disabled"
+            except LLMInputTooLong:
+                provider_status = "input_too_long"
             except Exception as exc:
                 # Provider errors and malformed JSON fall back to local rules without logging evidence.
                 logger.warning("LLM response unavailable (%s); using local analysis", type(exc).__name__)
-        if not text and llm_result:
+                provider_status = "unavailable"
+        transcription_source = "extraction"
+        if not text.strip() and llm_result:
             text = llm_result.text
+            transcription_source = "model_transcription_unverified"
         language = (llm_result.language if llm_result and llm_result.language in {"en", "hi", "kn"} else None) or detect_language(text)
         coverage = describe_extraction_coverage(mime_type, text, ocr_note, provenance, video_summary)
+        threats, quality = resolve_threats(text, language, llm_result)
+        quality.setdefault("provider_status", provider_status)
+        quality["transcription_source"] = transcription_source
+        quality["rules_version"] = RULES_VERSION
+        quality["model_characters_examined"] = len(text) if provider_status == "completed" else 0
+        quality["notes"] = []
+        if provider_status == "disabled":
+            quality["notes"].append("Local pattern review only. A language model has not reviewed this evidence.")
+        elif provider_status in {"unavailable", "not_attempted", "input_too_long"}:
+            quality["notes"].append("Model review did not complete. Local patterns were used; inspect the source for missed context.")
+        if provider_status == "input_too_long":
+            quality["notes"].append("The text exceeded the model review limit. It was not silently shortened for a model verdict.")
+        if quality["assessment"] == "needs_review":
+            quality["notes"].append("The model could not make a supported assessment. Human review is needed.")
+        if quality["model_rule_disagreement"]:
+            quality["notes"].append("The model and local patterns disagreed. Compare the suggested categories with the source.")
+        if transcription_source == "model_transcription_unverified":
+            quality["notes"].append("The model supplied the transcription. Check its wording against the original media.")
+        if not threats:
+            quality["notes"].append("No returned flags does not establish that the content is safe or complete.")
         if not text.strip():
             if analysis is None:
                 analysis = Analysis(evidence_id=evidence_uuid, status="skipped")
@@ -143,13 +154,13 @@ def analyse_evidence(evidence_id: str, session_factory) -> None:
                              "investigation_categories": investigation_categories,
                              "provenance": provenance, "video": video_summary,
                              "coverage": coverage,
+                             "analysis_quality": quality,
                              "review_feedback": (analysis.raw_json or {}).get("review_feedback", {})}
             evidence.analysis_status = "skipped"
             db.commit()
             return
 
         entities = _merge_llm_entities(text, llm_result.entities if llm_result else [], extract_entities(text))
-        threats = _merge_threats(text, language, llm_result)
         if analysis is None:
             analysis = Analysis(evidence_id=evidence_uuid, status="running")
             db.add(analysis)
@@ -161,7 +172,8 @@ def analyse_evidence(evidence_id: str, session_factory) -> None:
         previous_feedback = (analysis.raw_json or {}).get("review_feedback", {})
         analysis.raw_json = {
             "human_review_required": True,
-            "source": "llm+rules" if llm_result else RULES_SOURCE,
+            "source": quality["source"],
+            "analysis_quality": quality,
             "ocr_note": ocr_note,
             "extraction_method": ocr_note,
             "investigation_categories": investigation_categories,

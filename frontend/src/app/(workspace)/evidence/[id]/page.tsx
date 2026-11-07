@@ -4,7 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ApiError, getAnalysis, getCase, getEvidence, getEvidenceFile, verifyEvidence } from "@/lib/api";
+import { ApiError, getAnalysis, getCase, getEvidence, getEvidenceFile, verifyEvidence, requestAnalysis } from "@/lib/api";
+import { useSessionUser } from "@/lib/session";
 import { formatBytes, formatDate, shortHash, titleCase } from "@/lib/format";
 import type { Analysis, CaseDetail, EvidenceSummary, Verification } from "@/lib/types";
 import { VerifyBadge } from "@/components/verify-badge";
@@ -34,12 +35,15 @@ function getInvestigationSummary(analysis: Analysis): string {
 }
 
 function analysisMethod(analysis: Analysis): string {
+  if (analysis.analysis_source === "llm-reviewed") return "Model review with source quotes";
   if (analysis.analysis_source === "llm+rules") return "AI model with local rules";
   if (analysis.analysis_source?.startsWith("rules-")) return "Local rules only";
   return analysis.model || analysis.extraction_method || "Method not recorded";
 }
 
 export default function EvidencePage() {
+  const role = useSessionUser()?.role;
+  const [reanalysing, setReanalysing] = useState(false);
   const params = useParams<{ id: string }>();
   const id = decodeURIComponent(params.id);
   const [item, setItem] = useState<EvidenceSummary | null>(null);
@@ -107,6 +111,13 @@ export default function EvidencePage() {
     finally { setChecking(false); }
   }
 
+  async function rerunAnalysis() {
+    setReanalysing(true); setAnalysisError("");
+    try { setAnalysis(await requestAnalysis(id, true)); }
+    catch (reason) { setAnalysisError(reason instanceof ApiError ? reason.message : "Could not request a fresh review."); }
+    finally { setReanalysing(false); }
+  }
+
   if (loading) return <div className="table-state"><div className="spinner" /><span>Loading evidence…</span></div>;
   if (error && !item) return <div className="inline-error" role="alert"><strong>Evidence is unavailable</strong><span>{error}</span><Link className="button button-subtle" href="/cases">Back to cases</Link></div>;
   if (!item) return null;
@@ -136,6 +147,9 @@ export default function EvidencePage() {
       <div className="panel-title-row"><div><span className="eyebrow">INVESTIGATOR VIEW</span><h2 id="investigation-output-heading">Investigative summary</h2><p>Structured review leads from this evidence file.</p></div>{analysis && <span className={`status-chip status-${analysis.status}`}>{titleCase(analysis.status)}</span>}</div>
       {analysisError ? <div className="analysis-output-empty" role="status">{analysisError}</div> : analysis ? <>
         <div className="investigation-summary"><span className="summary-label">AUTOMATED OVERVIEW · HUMAN REVIEW REQUIRED</span><p>{summary}</p><div className="analysis-method">Method: {analysisMethodLabel}{analysis.model && analysis.analysis_source ? ` · ${analysis.model}` : ""}{analysis.prompt_version ? ` · prompt ${analysis.prompt_version}` : ""}</div></div>
+
+        {analysis.analysis_quality?.notes?.length ? <div className="analysis-caveat" role="status"><strong>Review limitations</strong><ul>{analysis.analysis_quality.notes.map((note) => <li key={note}>{note}</li>)}</ul></div> : null}
+        {(role === "investigator" || role === "admin") && <div className="heading-actions"><button className="button button-subtle" onClick={rerunAnalysis} disabled={reanalysing || analysis.status === "running" || analysis.status === "pending"}>{reanalysing ? "Requesting review…" : "Re-run automated review"}</button><small>Uses the current detector. Recorded human decisions are retained.</small></div>}
 
         <div className="analysis-result-grid">
           <section className="analysis-result-section" aria-labelledby="observations-heading"><div className="analysis-section-heading"><div><h3 id="observations-heading">File observations</h3><p>Technical metadata only; values can be missing or altered.</p></div></div>

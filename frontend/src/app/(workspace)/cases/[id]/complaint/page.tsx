@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { ApiError, deleteExternalComplaintReference, downloadComplaintPacket, getComplaintPreview, getExternalComplaintReference, saveExternalComplaintReference } from "@/lib/api";
 import { formatDate, titleCase } from "@/lib/format";
 import { useSessionUser } from "@/lib/session";
-import type { ComplaintAiNoteFeedback, ComplaintChannel, ComplaintPacketInput, ComplaintPreview, ExternalComplaintReference } from "@/lib/types";
+import type { ComplaintAiNoteFeedback, ComplaintChannel, ComplaintEvidenceFeedback, ComplaintPacketInput, ComplaintPreview, ExternalComplaintReference } from "@/lib/types";
 
 type ComplaintFields = Omit<ComplaintPacketInput, "reviewed_evidence_and_notes" | "understands_not_submitted">;
 
@@ -38,6 +38,7 @@ export default function ComplaintPreparationPage() {
   const [success, setSuccess] = useState("");
   const [generatedChannel, setGeneratedChannel] = useState<ComplaintChannel | null>(null);
   const [aiNoteFeedback, setAiNoteFeedback] = useState<Record<string, ComplaintAiNoteFeedback>>({});
+  const [evidenceFeedback, setEvidenceFeedback] = useState<Record<string, ComplaintEvidenceFeedback>>({});
   const [externalReference, setExternalReference] = useState<ExternalComplaintReference>({ saved: false, channel: null, last_four: null, updated_at: null });
   const [externalReferenceValue, setExternalReferenceValue] = useState("");
   const [externalReferenceChannel, setExternalReferenceChannel] = useState<ComplaintChannel>("cybercrime_portal");
@@ -54,6 +55,7 @@ export default function ComplaintPreparationPage() {
         if (!active) return;
         setPreview(data);
         setAiNoteFeedback(Object.fromEntries(data.ai_notes.map((note) => [note.flag_id, { flag_id: note.flag_id, include: true, reporter_comment: "" }])));
+        setEvidenceFeedback(Object.fromEntries(data.evidence.map((evidence) => [evidence.evidence_id, { evidence_id: evidence.evidence_id, include: true }])));
         setFields((current) => current.incident_date ? current : {
           ...current,
           incident_date: data.incident_date_on_record?.slice(0, 10) || "",
@@ -96,6 +98,14 @@ export default function ComplaintPreparationPage() {
     }));
   }
 
+  function updateEvidence(evidenceId: string, include: boolean) {
+    setEvidenceFeedback((current) => ({
+      ...current,
+      [evidenceId]: { evidence_id: evidenceId, include },
+    }));
+    setSuccess("");
+  }
+
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!preview || !reviewed || !notSubmitted) return;
@@ -107,6 +117,7 @@ export default function ComplaintPreparationPage() {
         ...fields,
         reviewed_evidence_and_notes: true,
         understands_not_submitted: true,
+        evidence_feedback: preview.evidence.map((evidence) => evidenceFeedback[evidence.evidence_id] || { evidence_id: evidence.evidence_id, include: true }),
         ai_note_feedback: preview.ai_notes.map((note) => aiNoteFeedback[note.flag_id] || { flag_id: note.flag_id, include: true }),
       });
       setGeneratedChannel(fields.channel);
@@ -224,11 +235,12 @@ export default function ComplaintPreparationPage() {
         </section>
 
         <section className="panel complaint-panel" aria-labelledby="complaint-review-heading">
-          <div className="panel-title-row"><div><span className="eyebrow">02 · REVIEW BEFORE DOWNLOAD</span><h2 id="complaint-review-heading">Check the case material</h2><p>Only records from this case are included. Open each original file and check its contents before continuing.</p></div><span className="count-pill">{preview.evidence.length} evidence file{preview.evidence.length === 1 ? "" : "s"}</span></div>
+          <div className="panel-title-row"><div><span className="eyebrow">02 · REVIEW BEFORE DOWNLOAD</span><h2 id="complaint-review-heading">Check the case material</h2><p>Choose which case files to list in this draft. Leaving a file out does not delete or change the preserved original.</p></div><span className="count-pill">{preview.evidence.length} evidence file{preview.evidence.length === 1 ? "" : "s"}</span></div>
           {preview.evidence.length ? <div className="complaint-evidence-list">{preview.evidence.map((evidence) => <article className="complaint-evidence-card" key={evidence.evidence_id}>
             <div><Link href={`/evidence/${evidence.evidence_id}`}><strong>{evidence.filename}</strong><span>Open original ↗</span></Link><small>Uploaded {formatDate(evidence.uploaded_at)} · Analysis {titleCase(evidence.analysis_status)}</small></div>
             <code title={evidence.sha256}>SHA-256 {evidence.sha256}</code>
             <span className="complaint-status">Integrity: {titleCase(evidence.verification)} · Anchor: {titleCase(evidence.anchor_status)}</span>
+            <label className="complaint-check"><input type="checkbox" checked={evidenceFeedback[evidence.evidence_id]?.include ?? true} onChange={(event) => updateEvidence(evidence.evidence_id, event.target.checked)} /><span>Include this file in my complaint draft</span></label>
           </article>)}</div> : <div className="activity-empty">No evidence is attached yet. You can still prepare a written draft, but there will be no evidence manifest.</div>}
           {preview.ai_notes.length ? <div className="complaint-notes"><h3>AI-assisted notes · {preview.ai_notes.length}</h3><p>These are review leads, not findings. A “confirmed” label only records a human review of the suggestion; it does not confirm an offence. You can leave a correction for this draft or leave a suggestion out; this does not change the saved AI note.</p>{preview.ai_notes.map((note) => {
             const feedback = aiNoteFeedback[note.flag_id] || { flag_id: note.flag_id, include: true, reporter_comment: "" };
@@ -238,7 +250,7 @@ export default function ComplaintPreparationPage() {
             <label className="complaint-check"><input type="checkbox" checked={feedback.include} onChange={(event) => updateAiNote(note.flag_id, { include: event.target.checked })} /><span>Include this suggestion in my complaint draft</span></label>
             <label className="ai-note-correction">My correction or context <span className="optional">Optional</span><textarea rows={2} maxLength={1000} disabled={!feedback.include} value={feedback.reporter_comment || ""} onChange={(event) => updateAiNote(note.flag_id, { reporter_comment: event.target.value })} placeholder="For example, explain why this excerpt is missing context." /><small>Included only in this download and labeled as your own note, not independently verified.</small></label>
           </article>;
-          })}</div> : <div className="activity-empty">No AI notes are recorded for this case.</div>}
+          })}</div> : <div className="activity-empty"><strong>No AI-assisted notes are recorded for this case.</strong><p>This does not mean a file is faulty or irrelevant. Automated review can miss context, and images or recordings may have no readable text. Review the original and choose whether it supports your account.</p></div>}
           {preview.analysis_pending_count > 0 && <p className="complaint-hint">{preview.analysis_pending_count} file(s) still have analysis pending. You can wait for them or prepare a draft now; this packet will show only available notes.</p>}
           {preview.analysis_unavailable_count > 0 && <p className="complaint-hint">Analysis was unavailable for {preview.analysis_unavailable_count} file(s). The original file remains in the evidence manifest.</p>}
           <ul className="case-summary-limitations">{preview.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>

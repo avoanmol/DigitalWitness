@@ -44,6 +44,13 @@ class ComplaintAiNoteFeedback(BaseModel):
         return value
 
 
+class ComplaintEvidenceFeedback(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    evidence_id: UUID
+    include: bool = True
+
+
 class ComplaintPacketRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -58,6 +65,7 @@ class ComplaintPacketRequest(BaseModel):
     district: str | None = Field(default=None, max_length=100)
     police_station: str | None = Field(default=None, max_length=160)
     statement: str = Field(min_length=20, max_length=6000)
+    evidence_feedback: list[ComplaintEvidenceFeedback] = Field(default_factory=list, max_length=500)
     ai_note_feedback: list[ComplaintAiNoteFeedback] = Field(default_factory=list, max_length=100)
     reviewed_evidence_and_notes: bool = False
     understands_not_submitted: bool = False
@@ -85,6 +93,14 @@ class ComplaintPacketRequest(BaseModel):
         flag_ids = [item.flag_id for item in value]
         if len(flag_ids) != len(set(flag_ids)):
             raise ValueError("Each AI note can be reviewed only once per draft.")
+        return value
+
+    @field_validator("evidence_feedback")
+    @classmethod
+    def reject_duplicate_evidence_feedback(cls, value: list[ComplaintEvidenceFeedback]) -> list[ComplaintEvidenceFeedback]:
+        evidence_ids = [item.evidence_id for item in value]
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("Each evidence file can be selected only once per draft.")
         return value
 
     @field_validator("profile_url")
@@ -172,6 +188,22 @@ def _case_records(db: Session, case_id: UUID) -> tuple[list[Evidence], list[dict
             "transaction_hash": batch.tx_hash if batch else None,
         })
     return evidence, manifest
+
+
+def _selected_evidence_manifest(
+    evidence: list[Evidence],
+    manifest: list[dict[str, Any]],
+    feedback: list[ComplaintEvidenceFeedback],
+) -> list[dict[str, Any]]:
+    selected = {item.evidence_id: item.include for item in feedback}
+    valid_ids = {item.id for item in evidence}
+    if set(selected) - valid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Evidence selection must refer only to files in this case.",
+        )
+    # Backwards-compatible default: any case file omitted from the selection is included.
+    return [item for item in manifest if selected.get(UUID(item["evidence_id"]), True)]
 
 
 def _ai_notes(db: Session, evidence: list[Evidence]) -> list[dict[str, Any]]:
@@ -317,6 +349,7 @@ def create_complaints_router(*, get_db_dependency: Callable[..., Any], get_curre
                 detail="Review the evidence and AI notes, and confirm the packet will not be submitted automatically.",
             )
         evidence, manifest = _case_records(db, case_id)
+        manifest = _selected_evidence_manifest(evidence, manifest, payload.evidence_feedback)
         notes = _ai_notes(db, evidence)
         feedback_by_id = {str(item.flag_id): item for item in payload.ai_note_feedback}
         valid_flag_ids = {note["flag_id"] for note in notes}
@@ -334,7 +367,7 @@ def create_complaints_router(*, get_db_dependency: Callable[..., Any], get_curre
             })
         notes = selected_notes
         generated_at = datetime.now(timezone.utc)
-        details = payload.model_dump(exclude={"reviewed_evidence_and_notes", "understands_not_submitted", "ai_note_feedback"})
+        details = payload.model_dump(exclude={"reviewed_evidence_and_notes", "understands_not_submitted", "ai_note_feedback", "evidence_feedback"})
         if details.get("profile_url") is not None:
             details["profile_url"] = str(details["profile_url"])
         if payload.channel == "cybercrime_portal":
@@ -369,6 +402,7 @@ def create_complaints_router(*, get_db_dependency: Callable[..., Any], get_curre
                 "channel": payload.channel,
                 "format": packet_format,
                 "evidence_count": len(manifest),
+                "evidence_available_count": len(evidence),
                 "ai_note_count": len(notes),
                 "reporter_comment_count": sum(bool(note.get("reporter_comment")) for note in notes),
             },

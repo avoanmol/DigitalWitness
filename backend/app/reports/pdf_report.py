@@ -185,7 +185,8 @@ def build_case_report(
 
     story.append(Paragraph("CONFIRMED FLAGS", heading_style))
     story.append(Paragraph(f"Confirmed flags included: {len(confirmed_flags)} · Unreviewed flags: {unreviewed_flag_count}. Rejected flags are excluded.", sub_style))
-    flag_rows = [[cell(value) for value in ["Evidence", "Threat class", "Severity", "Verbatim snippet", "Confidence", "Reviewed (UTC)"]]]
+    story.append(Paragraph("Scores are uncalibrated review signals, not probabilities that a claim is true.", sub_style))
+    flag_rows = [[cell(value) for value in ["Evidence", "Threat class", "Severity", "Verbatim snippet", "Review score", "Reviewed (UTC)"]]]
     flag_rows.extend([
         [cell(getattr(flag, "evidence_id", "")), cell(getattr(flag, "threat_class", "")), cell(getattr(flag, "severity", "")), cell(getattr(flag, "snippet", "")), cell(f"{float(getattr(flag, 'confidence', 0)):.0%}"), cell(_utc(getattr(flag, "reviewed_at", None)))]
         for flag in confirmed_flags

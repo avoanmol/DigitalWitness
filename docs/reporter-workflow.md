@@ -28,7 +28,7 @@ For the complaint draft, the reporter can leave a correction or context note bes
 
 The reporter can add the incident date/time, platform, account or content link, and a statement in their own words. The narrative is used to make the download and is not saved in the case database or audit log. Aadhaar, passwords, and a full home address are not requested.
 
-State, district, and police-station fields appear only for the local-police option and are optional. DigitalWitness does not look up, choose, or contact a police station. The packet lists the case evidence and selected AI notes, clearly marked as suggestions. The reporter must review the complete draft before downloading it.
+State, district, and police-station fields appear only for the local-police option and are optional. DigitalWitness does not look up, choose, or contact a police station. The reporter chooses which case files and AI notes to list in the draft; both default to included. Leaving a file out of the draft never deletes or changes the preserved original. If automated review returns no notes, that does not mean the file is faulty or irrelevant. `Altered` is reserved for a file fingerprint or proof mismatch. The reporter must review the complete draft before downloading it.
 
 ## 6. Choose whether to report outside the app
 

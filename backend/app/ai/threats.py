@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from backend.app.ai.rule_context import is_explicit_nonincident
 
-RULES_VERSION = "local-rules-v2"
-RULES_SOURCE = "rules-v2"
+RULES_VERSION = "local-rules-v3"
+RULES_SOURCE = "rules-v3"
 
 
 @dataclass(frozen=True)
@@ -66,8 +67,8 @@ CATEGORY_TERMS = {
                 "unless you pay", "threaten you", "threaten to expose", "blackmail you unless", "i will blackmail you",
             ),
             "intimate_image_abuse": (
-                "share your photos", "share your private photos", "share your private images",
-                "leak your photos", "publish your intimate pictures", "post your private pictures",
+                "share your private photos", "share your private images",
+                "publish your intimate pictures", "post your private pictures",
                 "upload your private photos", "share your intimate images",
             ),
             "fake_profile_impersonation": (
@@ -268,9 +269,9 @@ ENGLISH_PATTERNS = {
 }
 
 INTIMATE_IMAGE_SIGNAL = re.compile(
-    r"\b(?:intimate|private|nude|fabricated|fake|altered|morphed)\b.{0,40}\b"
+    r"\b(?:intimate|private|nude|naked|sexual)\b.{0,40}\b"
     r"(?:photos?|images?|pictures?|videos?|clips?)\b|\b(?:photos?|images?|pictures?|videos?|clips?)\b"
-    r".{0,40}\b(?:intimate|private|nude|fabricated|fake|altered|morphed)\b", re.I
+    r".{0,40}\b(?:intimate|private|nude|naked|sexual)\b", re.I
 )
 INTIMATE_IMAGE_ACTION = re.compile(
     r"\b(?:share\w*|post\w*|publish\w*|upload\w*|send\w*|forward\w*|circulat\w*|leak\w*|"
@@ -319,7 +320,9 @@ def _contextual_english_categories(text: str) -> set[str]:
     if (
         INTIMATE_IMAGE_SIGNAL.search(text)
         and INTIMATE_IMAGE_ACTION.search(text)
-        and INTIMATE_IMAGE_COERCION.search(text)
+        and (INTIMATE_IMAGE_COERCION.search(text) or re.search(
+            r"\b(?:without (?:my |her |his )?(?:consent|permission)|"
+            r"never agreed|did not consent|against my will)\b", text))
     ):
         matches.add("intimate_image_abuse")
     if (
@@ -336,31 +339,53 @@ def _contextual_english_categories(text: str) -> set[str]:
         and re.search(r"\b(?:share\w*|post\w*|publish\w*|send\w*|forward\w*|tag\w*|circulat\w*)\b", text)
     ):
         matches.add("defamation_morphing")
+    if re.search(r"\b(?:meet|send|give|do|withdraw|remove|delete|stay|come)\b.{0,100}"
+                 r"\b(?:or i|or else|otherwise)\b.{0,80}"
+                 r"\b(?:publish|expose|leak|tell|share|hurt|kill)\b", text):
+        matches.add("blackmail_threatening")
+    if re.search(r"\b(?:leak|publish|expose|share|make)\b.{0,110}"
+                 r"\b(?:if you (?:do not|don't)|unless (?:i|you) (?:obey\w*|pay|comply))\b", text):
+        matches.add("blackmail_threatening")
+    if (DEFAMATION_MEDIA_SIGNAL.search(text) and DEFAMATION_MANIPULATION_SIGNAL.search(text)
+            and re.search(r"\blabel\w*\b.{0,35}\b(?:my|your) name\b", text)):
+        matches.add("defamation_morphing")
     return matches
 
 
 def detect_threats(text: str, language: str) -> list[ThreatCandidate]:
-    language_terms = CATEGORY_TERMS.get(language, CATEGORY_TERMS["en"])
+    # Mixed-script messages can contain an English threat beside Hindi/Kannada.
+    languages = list(dict.fromkeys([language if language in CATEGORY_TERMS else "en", "en"]))
     found: list[ThreatCandidate] = []
     seen: set[tuple[str, str]] = set()
     # OCR commonly inserts line wraps inside a sentence; match cues across
     # whitespace while keeping the original evidence snippet unchanged.
-    for segment in re.split(r"(?<=[.!?।])\s+", text):
-        snippet = segment.strip()
+    # Bounded overlapping windows keep late matches in long chat exports in
+    # their quoted source. Never quote only the unrelated beginning of a file.
+    segments: list[tuple[int, int]] = []
+    for match in re.finditer(r"\S(?:.*?\S)?(?=(?<=[.!?।;])\s+|\s*$)", text, re.S):
+        start, end = match.span()
+        while end - start > 3500:
+            segments.append((start, start + 3500))
+            start += 3000
+        segments.append((start, end))
+    for start, end in segments:
+        snippet = text[start:end]
         if not snippet:
             continue
-        lowered = re.sub(r"\s+", " ", snippet.casefold())
+        lowered = re.sub(r"\s+", " ", snippet.casefold()).replace("’", "'")
         matched_severity: dict[str, str] = {}
         matched_by_phrase: set[str] = set()
-        for severity in ("critical", "high", "medium"):
-            for threat_class, phrases in language_terms[severity].items():
-                if threat_class not in matched_severity and any(phrase.casefold() in lowered for phrase in phrases):
-                    matched_severity[threat_class] = severity
-                    matched_by_phrase.add(threat_class)
-        if language == "en":
-            for threat_class in _contextual_english_categories(lowered):
-                matched_severity.setdefault(threat_class, "high")
+        for lang in languages:
+            for severity in ("critical", "high", "medium"):
+                for threat_class, phrases in CATEGORY_TERMS[lang][severity].items():
+                    if threat_class not in matched_severity and any(phrase.casefold() in lowered for phrase in phrases):
+                        matched_severity[threat_class] = severity
+                        matched_by_phrase.add(threat_class)
+        for threat_class in _contextual_english_categories(lowered):
+            matched_severity.setdefault(threat_class, "high")
         for threat_class, severity in matched_severity.items():
+            if is_explicit_nonincident(lowered, threat_class):
+                continue
             key = (threat_class, snippet)
             if key not in seen:
                 cautions = context_cautions(snippet, language)
@@ -380,11 +405,19 @@ def detect_threats(text: str, language: str) -> list[ThreatCandidate]:
                     cautions,
                 ))
                 seen.add(key)
-    if language == "en" and text.strip():
-        whole_text = re.sub(r"\s+", " ", text.casefold()).strip()
+    # Join only neighbouring sentences. Distant events must not be combined
+    # into a single allegation, and every quote must include its matched cues.
+    for left, right in zip(segments, segments[1:]):
+        start, end = left[0], right[1]
+        excerpt = text[start:end]
+        if len(excerpt) > 4000:
+            continue
+        whole_text = re.sub(r"\s+", " ", excerpt.casefold()).replace("’", "'")
         already_found = {item.threat_class for item in found}
-        for threat_class in _contextual_english_categories(whole_text) - already_found:
-            cautions = context_cautions(text, language)
+        for threat_class in sorted(_contextual_english_categories(whole_text) - already_found):
+            if is_explicit_nonincident(whole_text, threat_class):
+                continue
+            cautions = context_cautions(excerpt, language)
             confidence = .42 if cautions else .56
             reason = (
                 f"Matched a configured English review pattern across the evidence excerpt for {threat_class}; "
@@ -392,5 +425,5 @@ def detect_threats(text: str, language: str) -> list[ThreatCandidate]:
             )
             if cautions:
                 reason += " Context cues need review: " + ", ".join(cautions) + ". This does not decide whether the content is harmful."
-            found.append(ThreatCandidate(threat_class, "high", text.strip()[:4000], confidence, reason, cautions))
+            found.append(ThreatCandidate(threat_class, "high", excerpt, confidence, reason, cautions))
     return found[:100]
